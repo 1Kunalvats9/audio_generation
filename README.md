@@ -83,6 +83,48 @@ data/
     └── README
 ```
 
+### Data findings (verified 2026-10-27)
+
+| Check | Result |
+| --- | --- |
+| Rows in `metadata.csv` / unique IDs | 13,100 / 13,100 |
+| wav files vs IDs | 13,100 — 0 missing, 0 extra |
+| Total audio | 23.92 h |
+| Clip length | 1.11 s min · 6.76 s median · 10.10 s max |
+| Mel frames per clip | 96 min · 870 max |
+| Rows where raw ≠ normalised text | 1,505 (11.5%) — numbers and money spelled out, so we use column 3 |
+| Digits left after cleaning | 0 |
+| Non-ASCII left after cleaning | 0 |
+| Punctuation left after cleaning | `, . - ' " ; : ? !` — MFA strips these itself |
+| Source-text prefixes | 50, between 108 and 518 clips each |
+
+Cleaning decisions these checks settled:
+
+- **`St.` → `saint`.** All 16 occurrences are places (St. Albans, Bury St. Edmunds,
+  St. Sepulchre, St. James's). Exactly one, `LJ007-0230` "Giltspur St. Compter", is really
+  *Street*; one clip in 13,100 is not worth a special case.
+- **`ft.` → `fort`** is correct: the only occurrence is "Dallas-Ft. Worth" (`LJ045-0055`).
+- **`[square brackets]` appear in only 7 clips**, all Warren Commission transcriber notes
+  (`[Marina]`, `[Oswald]`, `[the lunchroom door]`). These are almost certainly not spoken,
+  so `REMOVE_SQUARE_BRACKET_CONTENT` should become `True` after a listening check.
+- **`(round brackets)` appear in 151 clips** and are genuine spoken asides, so the words stay
+  and only the bracket characters go.
+- **`messrs.` appears in 17 clips** and is *not* expanded — a likely MFA out-of-vocabulary
+  case for M2 to handle.
+
+### Splits
+
+Test is whole source texts (`LJ005`), so no source text appears in both train and test.
+With a single speaker, speaker-disjoint evaluation is impossible, so this is the honest
+alternative.
+
+| Split | Clips | Hours |
+| --- | --- | --- |
+| train | 12,501 | 22.83 |
+| val | 300 | 0.54 |
+| test (`LJ005`) | 299 | 0.55 |
+| test_100 | 100 | 0.19 |
+
 ### Manual download and extraction (without make)
 
 ```bash
@@ -172,6 +214,8 @@ samples/              a few final wavs per system to listen to
 | M4 | Sound: mels, vocoder, phoneme templates, baseline audio |
 | M5 | Repo and evaluation: WER, results, demo |
 
+**Who does what, in detail, and in what order: [TEAM.md](TEAM.md).**
+
 ---
 
 ## Troubleshooting
@@ -182,7 +226,7 @@ samples/              a few final wavs per system to listen to
 | `uv: command not found` | Install uv (see Requirements) and open a new terminal |
 | `python3.11: command not found` | Not needed; `uv venv --python 3.11` downloads Python 3.11 itself |
 | `shasum: ... FAILED` | The archive is incomplete or corrupted: delete it and copy or download again |
-| SpeechBrain error mentioning `list_audio_backends` or `use_auth_token` | `uv pip install torch==2.8.0 torchaudio==2.8.0 "huggingface_hub<1.0"` |
+| SpeechBrain error mentioning `list_audio_backends` or `use_auth_token` | Only if the vocoder fails to load: `uv pip install torch==2.8.0 torchaudio==2.8.0 "huggingface_hub<1.0"`. Verified working without it on torch 2.14.1 / torchaudio 2.11.0 / speechbrain 1.1.2 |
 | `GPU: False` on the NVIDIA laptop | Reinstall PyTorch with the CUDA command from pytorch.org |
 | `make: command not found` (Windows) | Use WSL, or run the commands from the Manual download section and the steps in the Makefile by hand |
 

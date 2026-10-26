@@ -31,7 +31,8 @@ install: $(PY)
 	uv pip install --python $(PY) -r requirements.txt
 
 check:
-	$(PY) -c "import torch, torchaudio, librosa, soundfile, speechbrain, whisper, jiwer; print('torch', torch.__version__, '| GPU:', torch.cuda.is_available())"
+	$(PY) -c "import torch, torchaudio, librosa, soundfile, speechbrain, whisper, jiwer, sklearn, praatio, yaml, pandas; print('torch', torch.__version__, '| torchaudio', torchaudio.__version__, '| GPU:', torch.cuda.is_available())"
+	$(PY) -m src.config
 
 # ---------- dataset ----------
 $(ARCHIVE):
