@@ -1,0 +1,76 @@
+# Shared settings: "Phonetic Guided Audio Generation via Alignment and Latent Diffusion"
+#
+# FROZEN CONTRACT. Five people code against this file in parallel.
+# Do not change a value without telling the whole team: the mel settings in
+# particular must match the HiFi-GAN vocoder, or all synthesised audio is noise.
+
+seed: 42
+
+# ---------------------------------------------------------------------------
+# Audio / mel spectrogram
+# ---------------------------------------------------------------------------
+# Recipe (M4 implements this in src/audio.py):
+#   torchaudio.transforms.MelSpectrogram(
+#       sample_rate=22050, n_fft=1024, win_length=1024, hop_length=256,
+#       n_mels=80, f_min=0, f_max=8000,
+#       power=1, norm="slaney", mel_scale="slaney", center=True)
+#   then: log(mel.clamp(min=1e-5))        <- natural log, after the clamp
+audio:
+  sample_rate: 22050
+  n_fft: 1024
+  win_length: 1024
+  hop_length: 256          # 11.6 ms per frame
+  n_mels: 80
+  f_min: 0
+  f_max: 8000
+  power: 1                 # amplitude, NOT power (power=2)
+  norm: slaney
+  mel_scale: slaney
+  center: true
+  log_clamp_min: 1.0e-5
+
+# Frame bookkeeping, used by M2 (durations) and M4 (mels) alike:
+#   frames per clip      T = 1 + n_samples // hop_length
+#   seconds -> frame   idx = round(t * sample_rate / hop_length)
+# Both live in src/config.py as n_frames() and sec_to_frame() - import them,
+# do not re-implement them.
+
+# ---------------------------------------------------------------------------
+# Text / phonemes
+# ---------------------------------------------------------------------------
+text:
+  silence_symbol: sil
+
+# ---------------------------------------------------------------------------
+# Splits (M1). Test is whole ID prefixes so no source text leaks into train.
+# ---------------------------------------------------------------------------
+splits:
+  test_prefixes: [LJ005]   # 299 clips; whole-prefix holdout
+  n_val: 300               # random clips from the remainder
+  n_test_100: 100          # random sample of test, for the listening/WER set
+
+# MFA corpus folders (M1 -> M2), built in this order
+mfa:
+  pilot_clips: 200         # data/mfa_pilot  - hand to M2 first
+  core_train_clips: 4000   # data/mfa_core   - test + val + 4000 train
+  acoustic_model: english_us_arpa
+  dictionary: english_us_arpa
+
+# ---------------------------------------------------------------------------
+# Models
+# ---------------------------------------------------------------------------
+vocoder:
+  source: speechbrain/tts-hifigan-ljspeech
+  savedir: pretrained_models/tts-hifigan-ljspeech
+
+asr:
+  whisper_model: small.en
+
+# ---------------------------------------------------------------------------
+# Paths, all relative to the repo root
+# ---------------------------------------------------------------------------
+paths:
+  raw: data/raw/LJSpeech-1.1
+  metadata_clean: data/metadata_clean.csv
+  cache: data/cache
+  outputs: outputs

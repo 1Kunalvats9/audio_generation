@@ -1,0 +1,41 @@
+# Install with:  make install      (torch/torchaudio go in first, see the Makefile)
+#
+# TORCH PIN - decided by testing, not by guessing (2026-10-27):
+#   torch 2.14.1 + torchaudio 2.11.0 + speechbrain 1.1.2 + huggingface_hub 2.3.0
+#   loads speechbrain/tts-hifigan-ljspeech and vocodes correctly on macOS arm64 /
+#   Python 3.11. torchaudio.list_audio_backends IS gone, but speechbrain 1.1.x
+#   never calls it, so the old "pin torch==2.8.0" workaround is NOT needed.
+#   Verified: our mel recipe == speechbrain's own mel_spectrogram(), MAE 0.000000.
+#   Only if a teammate's machine fails to load the vocoder, fall back to:
+#     uv pip install torch==2.8.0 torchaudio==2.8.0 "huggingface_hub<1.0"
+# Always read audio with soundfile/librosa, never torchaudio.load.
+
+# --- core ---
+pyyaml
+pandas
+numpy
+scipy
+matplotlib
+tqdm
+
+# --- audio (M1, M4) ---
+soundfile
+librosa
+
+# --- duration models (M3) ---
+scikit-learn
+
+# --- vocoder (M4). 1.1+ is required: 1.0.3 breaks on modern torchaudio ---
+speechbrain>=1.1
+
+# --- TextGrid parsing (M2) ---
+praatio
+
+# --- evaluation (M5) ---
+openai-whisper
+jiwer
+
+# --- notebooks + tests ---
+jupyter
+ipykernel
+pytest
