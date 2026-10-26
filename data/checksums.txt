@@ -1,0 +1,1 @@
+be1a30453f28eb8dd26af4101ae40cbf2c50413b1bb21936cbcdc6fae3de8aa5  data/downloads/LJSpeech-1.1.tar.bz2
