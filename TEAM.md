@@ -23,14 +23,21 @@ M1 data  ──> M2 alignment ──> M3 durations ──┐
    └──> M4 sound ────┴───────────────────────┘
 ```
 
-- **M2 is the critical path.** MFA on ~4,600 clips is the longest single wait, so M2 starts
-  the moment the pilot exists (it already does — see below).
-- **M4 does not need M2** for `src/audio.py` or cached mels. Start there immediately.
-- **M3 cannot start modelling** until `phones.csv` exists, but *can* write and unit-test the
-  feature builder against a hand-made fake `phones.csv` today.
-- **M5 does not need anything** to set up the repo, Whisper harness and results scaffolding.
-  Test the WER harness on **R0** (the real recordings) — that works on day one and gives the
-  floor every other system is compared against.
+Status: **M1, M2, M3 and M5's harness are done.** The only work left is M4 running
+`make mels templates synth`, then M5 re-running `make wer results`.
+
+- **M4 is now the critical path.** `src/audio.py`, `extract_mels.py`, `phoneme_templates.py`
+  and `synthesize_baseline.py` are all written, but none has been *run*: `data/cache/` has no
+  mels and `outputs/audio/` has only the R1 probe clips. Everything else is waiting on that.
+- **`phones.csv` and `excluded.csv` are committed** — M2 added a narrow `.gitignore` exception,
+  so M3 and M4 just `git pull`: no MFA, no Drive. The rest of `data/` stays ignored, so cached
+  mels, TextGrids and the lexicon do not travel through git — M4 rebuilds mels with `make mels`.
+  A fresh clone still runs `make metadata corpus` first.
+- **M5's summary table hides duration MAE until A1/A2 audio exists.** `build_summary_table` in
+  `src/eval/make_results.py` only reads `mae.csv` inside its `if sys_name in wer_dfs` branch, so
+  the column shows `-` until `wer_A1.csv` / `wer_A2.csv` are written. `mae.csv` itself is correct
+  and is read fine (`{'A1': 0.0, 'A2': 20.13}`) — no action needed unless M5 wants the number
+  visible earlier.
 
 ---
 
@@ -125,28 +132,91 @@ The original task list, for reference:
 
 ---
 
-## M3 — Duration model
+## M3 — Duration model  ✅ DONE
 
 Owns: `src/baseline/duration_features.py`, `src/baseline/duration_models.py`, `src/eval/duration_mae.py`.
 
-Input `data/cache/phones.csv`, output `outputs/durations/test_pred.csv`:
-`clip_id, idx, phone, n_frames, pred_mean, pred_ridge, pred_gbt, pred_best`.
+Run with `make durations`. Input `data/cache/phones.csv`, outputs:
+- `outputs/durations/test_pred.csv` — `clip_id, idx, phone, n_frames, pred_mean, pred_ridge, pred_gbt, pred_best`
+  (299 test clips, 22,696 phones). **`pred_best` is what M4's A2 reads.**
+- `outputs/durations/val_pred.csv` — same columns, used for model selection and metrics.
+- `outputs/results/duration_models.csv` — the model comparison table for the report.
+- `outputs/results/mae.csv` — `system, model, mae_ms, mae_frames`; the A1/A2 rows M5 joins on.
 
-1. **Today, before M2 finishes:** hand-write a 20-row fake `phones.csv` with the exact
-   columns above and build the feature table against it. You lose a day if you wait.
-2. Features per phoneme: the phone identity (one-hot), previous and next phone, position in
-   word (`idx_in_word`, `word_len`), word length in phones, word index in the sentence,
-   sentence length in phones, whether it is `sil`, and whether it is word-initial/final.
-3. Three models, trained on `train`, tuned on `val`, reported on `test`:
-   - **phone mean** — the mean duration of each phone type. The baseline to beat.
-   - **ridge** — `sklearn.linear_model.Ridge` on the one-hot features.
-   - **boosted trees** — `sklearn.ensemble.HistGradientBoostingRegressor` (fast, handles
-     categoricals natively via `categorical_features=`).
-4. Metric: **duration MAE in milliseconds per phoneme** = `mae_frames * 11.61`
-   (use `SECONDS_PER_FRAME` from `src.config`). Report overall and per-phone.
-5. Predictions must be positive integers that **sum to the clip's `n_frames`**, because M4
-   builds a mel of exactly that length. Round, clamp to ≥1, then fix the largest phone to
-   absorb the rounding error. Put that logic in one function and give it to M4.
+### Results (test split, 299 held-out LJ005 clips)
+
+| model | MAE frames | MAE ms | MAE ms (no sil) | RMSE frames |
+|---|---|---|---|---|
+| phone mean (baseline) | 2.637 | 30.61 | 26.88 | 4.34 |
+| ridge | 2.338 | 27.14 | 23.31 | 3.93 |
+| **boosted trees (`pred_best`)** | **1.693** | **19.65** | **16.84** | **3.08** |
+
+`pred_best = gbt`, chosen on **val** (1.702 frames vs ridge 2.414, mean 2.738) and then reported
+on test — never selected on test. GBT beats the per-phone mean by **35.8%**. Early stopping ends
+training at **1052 iterations**, so `max_iter=1800` is a ceiling the model never reaches — the
+stopping criterion decides, not the budget.
+
+Every number is given twice, including and excluding `sil`: silence is 5.3% of rows but averages
+14.6 frames against 7.4 for real phones (max 481), so it dominates the headline MAE. The
+no-sil column is the honest measure of learned phone duration; the incl-sil column is what A2
+actually depends on.
+
+### Decisions worth knowing
+
+- **Target is `log(n_frames)`, not frames.** Durations are strongly right-skewed, so squared
+  error on raw frames would be spent almost entirely on long pauses. FastSpeech 2's duration
+  predictor does the same, which keeps us comparable to the anchor paper.
+- **Predictions are written as unrounded floats.** `adjust_durations` in `src/audio.py` (M4)
+  rounds, clamps to ≥ 1 and makes each clip sum to its true `n_frames`. Verified on all 100
+  A2 clips: every one sums exactly to target with no phone below 1 frame.
+- **No feature is derived from the clip's true length.** That would be a leak, and it would buy
+  nothing: A2 rescales to `target_T` anyway, so a clip-level tempo term is divided straight back
+  out. The model only has to get durations right *relative to each other* within a clip.
+  `tests/test_duration_features.py` guards this — tripling every duration must leave the feature
+  table byte-identical.
+- Because log-space regression returns a geometric mean, predicted clip totals run about **4.3%
+  short** (mean predicted/true = 0.957). Harmless: the rescaling absorbs it.
+- **Pre-pausal lengthening is in the features** as `dist_sil_left` / `dist_sil_right`, the phone
+  distance to the nearest silence. It is a real phonetic effect and a reportable finding rather
+  than a feature dump.
+
+### One fix landed in M4's `src/audio.py`
+
+`adjust_durations` had a one-line bug in its residual redistribution:
+
+```python
+add = min(remaining, d[i] - 1) if remaining < 0 else remaining   # was
+add = max(remaining, -(d[i] - 1)) if remaining < 0 else remaining  # now
+```
+
+When the rounded predictions overshoot the clip, `remaining` is negative and a phone can give up
+at most `d[i] - 1` frames. `min()` on a negative number returned the whole deficit, so the first
+phone took all of it and went negative — tripping the function's own `(d >= 1)` assert.
+
+It broke **27 of the 299 test clips, 8 of the 100 A2 synthesises** (worst case LJ005-0225:
+108 phones, rounded sum 835 against a target of 745, longest phone only 25 frames). It stayed
+hidden because the existing tests only used small or positive residuals, and because the earlier
+under-trained model under-predicted lengths so the residual was usually positive.
+
+Fixed with a regression test and a 25-case property test in `tests/test_audio.py`; the property
+test fails 15 ways against the old code. All 599 val+test clips now pass. **M4: this is in your
+file — please pull before running `make synth`.**
+
+### Features (21)
+
+Categorical: `phone` (stress digit kept — M2 measured 108 ms stressed vs 67 ms unstressed),
+`prev_phone`, `next_phone` (`<bos>`/`<eos>` at clip edges, grouped by `clip_id` so context never
+crosses a clip), `cls` (silence/vowel/fricative/stop/nasal/other, same classes as M2's figure),
+`stress`.
+
+Numeric: `idx_in_word`, `word_len`, `rel_in_word`, `is_word_start`, `is_word_end`,
+`word_idx_filled`, `n_words`, `rel_word`, `idx`, `n_phones`, `rel_phone`, `is_sil`,
+`prev_is_sil`, `next_is_sil`, `dist_sil_left`, `dist_sil_right`.
+
+**Trap for anyone touching this file:** silence rows in `phones.csv` carry sentinels —
+`word_idx = -1`, `word = "sil"`, `word_len = 1`, `idx_in_word = 0`. So never use `word_idx` raw as
+a numeric feature, count words with `word_idx.max() + 1` and not `nunique()`, and remember
+`is_word_start` and `is_word_end` are both trivially true on every silence.
 
 ---
 
