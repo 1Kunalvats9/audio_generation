@@ -1,0 +1,5 @@
+System,Description,Clips,Mean WER (%),Mean CER (%),Duration MAE
+R0,Real recording (sanity check),100,1.85,0.71,-
+R1,Real mel -> HiFi-GAN (copy synth),0,-,-,-
+A1,Phoneme templates + true MFA durations,0,-,-,-
+A2,Phoneme templates + predicted durations,0,-,-,-
