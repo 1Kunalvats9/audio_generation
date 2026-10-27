@@ -185,7 +185,10 @@ def adjust_durations(
             for i in sorted_idx:
                 if remaining == 0:
                     break
-                add = min(remaining, d[i] - 1) if remaining < 0 else remaining
+                # A phone can give up at most d[i] - 1 frames (floor of 1). Using
+                # min() here would hand the whole deficit to the first phone and
+                # drive it negative.
+                add = max(remaining, -(d[i] - 1)) if remaining < 0 else remaining
                 d[i] += add
                 remaining -= add
 

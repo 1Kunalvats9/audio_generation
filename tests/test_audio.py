@@ -92,10 +92,41 @@ def test_load_wav_creates_parent(tmp_path):
     ([1.0, 1.0, 1.0], 5),   # needs rounding up
     ([10.0],         10),
     ([0.3, 0.3, 0.3], 3),   # all would clamp to 1
+    # Over-prediction by more than the longest phone can give up, so the
+    # deficit has to be spread. Shapes taken from the clips that broke A2:
+    # LJ005-0225 (108 phones, rounded sum 835 vs target 745).
+    ([25.0] + [8.0] * 107, 745),
+    ([30.0, 20.0, 15.0] + [6.0] * 40, 120),
 ])
 def test_adjust_durations_sum(preds, target):
     result = adjust_durations(np.array(preds, dtype=np.float32), target)
     assert result.sum() == target, f"sum {result.sum()} != {target}"
+
+
+def test_adjust_durations_spreads_a_deficit_bigger_than_the_longest_phone():
+    """Regression: the residual must be capped at each phone's headroom.
+
+    Subtracting the whole deficit from the longest phone drove it negative, which
+    broke 27 of the 299 test clips (8 of the 100 A2 synthesises).
+    """
+    preds = np.array([25.0] + [8.0] * 107, dtype=np.float32)
+    result = adjust_durations(preds, target=745)
+    assert result.sum() == 745
+    assert (result >= 1).all()
+    assert len(result) == len(preds)
+
+
+@pytest.mark.parametrize("seed", range(25))
+def test_adjust_durations_holds_its_contract_for_random_inputs(seed):
+    """Any target >= n_phones must come back summing exactly, every phone >= 1."""
+    rng = np.random.default_rng(seed)
+    n = int(rng.integers(5, 120))
+    preds = rng.uniform(0.2, 30.0, size=n).astype(np.float32)
+    target = int(rng.integers(n, int(preds.sum() * 1.6) + n + 1))
+    result = adjust_durations(preds, target)
+    assert result.sum() == target
+    assert (result >= 1).all()
+    assert len(result) == n
 
 
 def test_adjust_durations_all_positive():
