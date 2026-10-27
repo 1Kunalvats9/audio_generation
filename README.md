@@ -70,7 +70,8 @@ Direct download: <https://data.keithito.com/data/speech/LJSpeech-1.1.tar.bz2>
 
 **Why the dataset is not in this repo:** the archive is 2.6 GB and GitHub rejects files over 100 MB.
 The repo stores only `data/checksums.txt` (its SHA-256 fingerprint), so every copy can be verified.
-**Never commit anything inside `data/` except `README.md`, `checksums.txt` and `sample/`.**
+**Never commit anything inside `data/` except `README.md`, `checksums.txt`, `sample/` and M2's
+`cache/phones.csv` + `cache/excluded.csv`** (committed so nobody else has to install MFA).
 
 After `make data`, the folder looks like this:
 

@@ -70,8 +70,9 @@ Produced (all 13,100 clips aligned, **0 excluded**):
 - `data/textgrids/{pilot,core,rest}/` — MFA output, plus MFA's `alignment_analysis.csv` per corpus.
 - `outputs/figures/alignment_examples.png`, `alignment_energy_by_class.png`, `phone_durations.png`.
 
-`data/` is git-ignored, so **M3 and M4 get `phones.csv` from the team Drive** (or align
-themselves: `make mfa-setup lexicon align-core align-rest phones`, ~15 min on 8 cores).
+**`phones.csv` and `excluded.csv` are committed** (an exception in `.gitignore`), so M3 and M4
+just `git pull` — no MFA needed. To regenerate them instead:
+`make mfa-setup lexicon align-core align-rest phones` (~15 min on 8 cores).
 
 ### What M3 and M4 need to know about `phones.csv`
 - **`phone` keeps MFA's stress digit** (`AH0`, `AH1`): 69 labels + `sil`. Stressed vowels

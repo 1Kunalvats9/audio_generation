@@ -2,6 +2,11 @@ data/*
 !data/README.md
 !data/checksums.txt
 !data/sample/
+# M2's alignment output is shared through git (MFA needs conda + 15 min to regenerate)
+!data/cache/
+data/cache/*
+!data/cache/phones.csv
+!data/cache/excluded.csv
 outputs/audio/
 pretrained_models/
 __pycache__/
