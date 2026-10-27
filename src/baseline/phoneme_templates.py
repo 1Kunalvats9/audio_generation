@@ -106,9 +106,15 @@ def build_templates(
 
             p1, p2 = split_thirds(seg.shape[1])
 
-            begin  = seg[:, :p1].mean(axis=1)        # (80,)
-            middle = seg[:, p1:p2].mean(axis=1)      # (80,)
-            end    = seg[:, p2:].mean(axis=1)         # (80,)
+            # A 1- or 2-frame phone cannot be cut into three non-empty thirds.
+            # The mean of an empty slice is NaN, and because templates average
+            # over occurrences, a single NaN poisons the phone's whole template
+            # (this left 61 of 70 phones NaN). An empty state falls back to the
+            # mean of the whole segment, which keeps all 3% of short phones.
+            whole  = seg.mean(axis=1)                 # (80,)
+            begin  = seg[:, :p1].mean(axis=1) if p1 > 0 else whole
+            middle = seg[:, p1:p2].mean(axis=1) if p2 > p1 else whole
+            end    = seg[:, p2:].mean(axis=1) if p2 < seg.shape[1] else whole
 
             accum[row.phone].append(
                 np.stack([begin, middle, end], axis=1)  # (80, 3)
