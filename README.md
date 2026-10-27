@@ -185,6 +185,44 @@ Run these in order from the repo root with `.venv` active. Each target works onc
 Systems compared: **R0** real recording · **R1** real mel → HiFi-GAN · **A1** templates + true MFA durations ·
 **A2** templates + predicted durations.
 
+### Results so far
+
+Full write-up: **[docs/REPORT.md](docs/REPORT.md)** · slides: **[docs/Phonetic_Guided_Speech_Generation.pptx](docs/Phonetic_Guided_Speech_Generation.pptx)**
+
+**Intelligibility (Whisper `small.en` on `test_100`, 100 clips per system)**
+
+| System | What it is | WER | CER |
+| --- | --- | --- | --- |
+| R0 | real recording | 1.85% | 0.71% |
+| R1 | real mel → HiFi-GAN | 2.48% | 0.95% |
+| A1 | templates + true MFA durations | 23.65% | 11.83% |
+| A2 | templates + predicted durations | 21.15% | 10.02% |
+
+Reading the chain: the vocoder costs **0.63 pp**, the averaged templates cost **21.17 pp**, and
+predicting durations instead of measuring them costs **−2.50 pp** — that is, nothing measurable
+(A2 beats A1 on 40 of 100 clips; Wilcoxon p = 0.048, paired t p = 0.100). **The acoustic model
+matters roughly thirty times more than duration accuracy.** This was not the result we expected;
+§7.4 of the report explains what we did and did not establish about why.
+
+**Duration model (`test` = 299 held-out LJ005 clips)**
+
+| Model | MAE frames | MAE ms | MAE ms (no sil) |
+| --- | --- | --- | --- |
+| phone mean (baseline) | 2.637 | 30.61 | 26.88 |
+| ridge | 2.338 | 27.14 | 23.31 |
+| **boosted trees** | **1.693** | **19.65** | **16.84** |
+
+Boosted trees beat the per-phone-mean baseline by **35.8%**. Model chosen on `val`, reported on
+`test`. One mel frame is 11.61 ms. Full table in `outputs/results/duration_models.csv`.
+
+**Alignment (all 13,100 clips, 0 excluded)**
+
+949,856 phones. Boundaries move energy the right way in **94.6%** of speech↔silence transitions,
+against **53.7%** for the same test with boundaries shifted by 5 frames — the control that shows
+the aligner is doing real work. Stressed vowels average 108 ms against 67 ms unstressed.
+
+**Listen:** `samples/` has the best, median and worst `test_100` clip in all four systems.
+
 ---
 
 ## Repository layout

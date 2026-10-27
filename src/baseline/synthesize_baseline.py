@@ -85,7 +85,10 @@ def synthesize_from_templates(
         if dur < 1:
             continue
 
-        tmpl = templates.get(phone) or templates.get(fallback_phone)
+        # `a or b` would raise: truth-testing a (80, 3) array is ambiguous.
+        tmpl = templates.get(phone)
+        if tmpl is None:
+            tmpl = templates.get(fallback_phone)
         if tmpl is None:
             # Last resort: silence-like zeros
             tmpl = np.zeros((80, 3), dtype=np.float32)
