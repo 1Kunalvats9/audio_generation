@@ -58,32 +58,69 @@ Still open for M1 (small, not blocking):
 
 ---
 
-## M2 — Alignment  ← START NOW, you are the critical path
+## M2 — Alignment  ✅ DONE, on branch `alignment`
 
-Owns: `src/data/textgrid_to_phones.py`.
+Owns: `src/data/textgrid_to_phones.py`, `src/data/build_lexicon.py`, `configs/oov.dict`,
+`notebooks/02_alignment.ipynb`.
 
-1. `make mfa-setup` (needs Miniforge), then `conda run -n aligner mfa version`.
-2. `make align-pilot` on the 200 clips already in `data/mfa_pilot/`. Open 2–3 TextGrids in
-   Praat and check the phone boundaries sit on the sound. **Do not skip this** — if the
-   pilot is wrong, the 4,600-clip run wastes hours.
-3. `make align-core` with `JOBS=<your cpu cores>`. Then `align-rest` if time allows;
-   core alone (test + val + 4,000 train) is enough for the baseline.
-4. Write `textgrid_to_phones.py` → `data/cache/phones.csv`:
-   `clip_id, idx, phone, start_frame, n_frames, word, word_idx, idx_in_word, word_len`
-   - Parse with `praatio` (already installed): `praatio.textgrid.openTextgrid(path, False)`.
-   - Convert times with `sec_to_frame()` from `src.config` — not your own rounding.
-   - **Durations of each clip must sum exactly to its `n_frames`** from
-     `data/metadata_clean.csv`. Fix the last phone to absorb the remainder.
-   - Zero-frame phones borrow 1 frame from the **longer** neighbour.
-   - Silence is `"sil"` (`src.config.SIL`).
-5. `data/cache/excluded.csv`: `clip_id, reason` — no TextGrid, contains `spn`, or
-   length mismatch > 2 frames.
+Produced (all 13,100 clips aligned, **0 excluded**):
+- `data/cache/phones.csv` — 949,856 phones, 34 MB. Every split complete:
+  train 12,501 · val 300 · test 299 · **test_100 100/100**, so A1/A2 exist for every clip.
+- `data/cache/excluded.csv` — header only; the code path is there if a re-run produces failures.
+- `data/textgrids/{pilot,core,rest}/` — MFA output, plus MFA's `alignment_analysis.csv` per corpus.
+- `outputs/figures/alignment_examples.png`, `alignment_energy_by_class.png`, `phone_durations.png`.
 
-Known traps found during setup:
-- **17 clips contain `messrs.`**, which our cleaner does not expand. MFA will likely mark it
-  OOV. Either add `"messrs": "messieurs"` to `ABBREVIATIONS` (tell M1) or let those clips
-  land in `excluded.csv`. Decide before `align-core`, not after.
-- `spn` means MFA could not identify a sound. Those clips must be excluded, not patched.
+`data/` is git-ignored, so **M3 and M4 get `phones.csv` from the team Drive** (or align
+themselves: `make mfa-setup lexicon align-core align-rest phones`, ~15 min on 8 cores).
+
+### What M3 and M4 need to know about `phones.csv`
+- **`phone` keeps MFA's stress digit** (`AH0`, `AH1`): 69 labels + `sil`. Stressed vowels
+  average 108 ms vs 67 ms unstressed, so stress is a real duration feature. For the 39
+  base phones use `phone.str.rstrip("012")` (M4's templates may want this: fewer, fuller classes).
+- **Silence rows:** `phone == "sil"`, `word == "sil"`, `word_idx == -1`, `idx_in_word == 0`,
+  `word_len == 1`. Neighbouring pauses are merged, so there are never two `sil` rows in a row.
+- `word_idx` counts spoken words only, from 0. `start_frame` is cumulative from 0 with no gaps:
+  `start_frame + n_frames` is the next row's `start_frame`, and a clip's rows sum to its `n_frames`.
+- `textgrid_to_phones.check()` asserts all of this on every run; `make test` covers the edge cases.
+
+### Did the boundaries sit on the sound? (step 2, `notebooks/02_alignment.ipynb`)
+- Visual check on 3 pilot clips, mel + boundaries: silences on the gaps, fricatives on the
+  high-frequency noise, stops on their closures. The 17-frame `CH` in "chiswick" that looked
+  long is closure + frication, which is correct for an affricate.
+- Measured on 300 clips: **94.6%** of silence↔speech boundaries sit on an energy change in the
+  right direction, vs 53.7% (chance) when every boundary is shifted by 5 frames.
+- Only 0.024% of non-silence phones exceed 400 ms (drawn-out "the", hesitations, and
+  `LJ001-0033` whose text says "mss" where the reader says "manuscripts"). No test_100 clip is
+  a likelihood outlier. Section 5 of the notebook lists the worst clips for M5's failure log.
+
+### Decisions made on the way
+- **`messrs` needed no change.** It *is* in the MFA dictionary as `M EH1 S ER0 Z` ("messers"),
+  which is how the reader says it. Expanding it to "messieurs" would have given the French
+  pronunciation. M1's cleaner is untouched.
+- **The real OOV problem was bigger: 366 words in 1,179 clips (9%)** — Warren Commission names
+  (`hosty`, `connally`), compounds (`motorcade`, `palmprint`), acronyms (`fbi` ×168). Excluding
+  them would have lost 9% of the data, skewed toward a few books, and one test_100 clip. Instead,
+  `build_lexicon.py` gives each a pronunciation **before** alignment: 9 acronyms spelled letter
+  by letter, 41 hand-corrected (G2P had "lineup" as *lin-ee-up*, "jebb" with no vowel), the rest
+  from MFA's G2P model. The result is committed as `configs/oov.dict`; `make align-*` merges it
+  into the dictionary automatically. `spn` would still be excluded, not patched — there just is none.
+- `make mfa-setup` downloads pinned model files (acoustic + dictionary v3.0.0, G2P v2.0.0) instead
+  of `mfa model download`, which pages the GitHub API and hit its 60-an-hour limit on the first call.
+- Works with Anaconda as well as Miniforge (`--override-channels` keeps `defaults` out).
+- Fixed `make corpus`: it called the script without its required `all` argument.
+
+Timings on an 8-core M-series Mac, `JOBS=6`: pilot 47 s, core 4.4 min, rest 7.4 min, `make phones` 10 s.
+
+The original task list, for reference:
+
+1. `make mfa-setup`, then `conda run -n aligner mfa version`.
+2. `make align-pilot`, then check 2–3 TextGrids against the sound. **Do not skip this.**
+3. `make align-core JOBS=<cores>`, then `align-rest` if time allows.
+4. `textgrid_to_phones.py` → `data/cache/phones.csv`
+   (`clip_id, idx, phone, start_frame, n_frames, word, word_idx, idx_in_word, word_len`):
+   times via `sec_to_frame()`, each clip sums exactly to `n_frames` (last phone absorbs the
+   remainder), zero-frame phones borrow from the longer neighbour, silence is `"sil"`.
+5. `data/cache/excluded.csv`: `clip_id, reason` — no TextGrid, `spn`, or mismatch > 2 frames.
 
 ---
 

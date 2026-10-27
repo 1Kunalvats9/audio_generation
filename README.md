@@ -109,8 +109,11 @@ Cleaning decisions these checks settled:
   so `REMOVE_SQUARE_BRACKET_CONTENT` should become `True` after a listening check.
 - **`(round brackets)` appear in 151 clips** and are genuine spoken asides, so the words stay
   and only the bracket characters go.
-- **`messrs.` appears in 17 clips** and is *not* expanded — a likely MFA out-of-vocabulary
-  case for M2 to handle.
+- **`messrs.` appears in 17 clips** and is *not* expanded. That is correct: the MFA dictionary
+  has `messrs` as `M EH1 S ER0 Z` ("messers"), which is how the reader says it.
+- **366 other words are missing from the MFA dictionary** (names, compounds, acronyms such as
+  "FBI"), in 1,179 clips. `configs/oov.dict` gives each a pronunciation before alignment, so
+  all 13,100 clips align and none is excluded. Details in [TEAM.md](TEAM.md), M2 section.
 
 ### Splits
 
@@ -145,6 +148,7 @@ Windows (Command Prompt): `curl` and `tar` work the same way. Check the file wit
 The Montreal Forced Aligner needs conda, so it lives in its own `aligner` environment, separate from `.venv`.
 
 1. Install [Miniforge](https://github.com/conda-forge/miniforge) (macOS: `brew install --cask miniforge`) and open a new terminal.
+   An existing Anaconda install works too.
 2. Run:
 
 ```bash
@@ -153,6 +157,8 @@ conda run -n aligner mfa version
 ```
 
 The `make align-*` targets call MFA through `conda run`, so you never need both environments active at once.
+They align with `data/lexicon/english_us_arpa_lj.dict`: the MFA dictionary plus `configs/oov.dict`,
+merged automatically by `make lexicon`. Re-run G2P for new OOVs with `python -m src.data.build_lexicon --refresh`.
 MFA docs: <https://montreal-forced-aligner.readthedocs.io/>
 
 ---
@@ -165,7 +171,7 @@ Run these in order from the repo root with `.venv` active. Each target works onc
 | --- | --- | --- | --- |
 | 1 | `make metadata` | M1 | `data/metadata_clean.csv`, `filelists/*.txt` |
 | 2 | `make corpus` | M1 | `data/mfa_pilot/`, `data/mfa_core/`, `data/mfa_rest/` |
-| 3 | `make align-pilot` / `align-core` / `align-rest` | M2 | `data/textgrids/` (`JOBS=8` uses 8 CPU cores) |
+| 3 | `make align-pilot` / `align-core` / `align-rest` | M2 | `data/textgrids/` (`JOBS=8` uses 8 CPU cores; builds `data/lexicon/` first) |
 | 4 | `make phones` | M2 | `data/cache/phones.csv`, `data/cache/excluded.csv` |
 | 5 | `make mels` | M4 | `data/cache/mels/*.npy` |
 | 6 | `make durations` | M3 | `outputs/durations/test_pred.csv`, `outputs/results/mae.csv` |
@@ -184,11 +190,12 @@ Systems compared: **R0** real recording · **R1** real mel → HiFi-GAN · **A1*
 
 ```
 configs/base.yaml     shared settings (sample rate 22,050, hop 256, 80 mels, paths)
+configs/oov.dict      pronunciations for the 366 words MFA's dictionary lacks (M2)
 filelists/            train / val / test / test_100 clip IDs (committed)
 data/                 dataset, alignments, caches (git-ignored)
 src/audio.py          load/save wav, wav → mel, mel → wav (HiFi-GAN)
 src/text/             text cleaning, phonemes for demo text
-src/data/             download, metadata, splits, MFA corpus, TextGrid → phones, mel extraction
+src/data/             download, metadata, splits, MFA corpus, OOV lexicon, TextGrid → phones, mel extraction
 src/baseline/         duration features + models, phoneme templates, baseline synthesis
 src/eval/             duration MAE, Whisper WER, results table
 notebooks/            data exploration, alignment checks, demo
