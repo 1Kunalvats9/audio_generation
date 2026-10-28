@@ -1,4 +1,8 @@
-"""Tag the worst clips in the failure log with a guessed cause  (M5 deliverable).
+"""Automated cross-check of the failure log's guessed causes.
+
+M5 annotates outputs/results/failure_log.csv by ear, using notebooks/03_demo.ipynb. This script
+is an independent, reproducible second opinion derived only from measurable signals, written to
+outputs/results/failure_log_auto.csv so it never overwrites that hand annotation.
 
 TEAM.md asks for the 10 worst clips per system, each tagged with a guessed cause from:
 
@@ -34,7 +38,8 @@ from src.audio import adjust_durations
 from src.config import CACHE_DIR, METADATA_CLEAN, OUTPUTS, SECONDS_PER_FRAME
 
 RESULTS = OUTPUTS / "results"
-FAILURE_LOG = RESULTS / "failure_log.csv"
+FAILURE_LOG = RESULTS / "failure_log.csv"          # M5's hand-annotated deliverable (read-only here)
+AUTO_LOG = RESULTS / "failure_log_auto.csv"        # this script's independent, reproducible pass
 TEST_PRED = OUTPUTS / "durations" / "test_pred.csv"
 MS = SECONDS_PER_FRAME * 1000
 
@@ -136,9 +141,9 @@ def main() -> int:
     tags = [tag(r, sig, r0_failed, thresholds) for _, r in log.iterrows()]
     log["guessed_cause"] = [t[0] for t in tags]
     log["evidence"] = [t[1] for t in tags]
-    log.to_csv(FAILURE_LOG, index=False)
+    log.to_csv(AUTO_LOG, index=False)
 
-    print(f"\ntagged {len(log)} clips -> {FAILURE_LOG.relative_to(OUTPUTS.parent)}\n")
+    print(f"\ntagged {len(log)} clips -> {AUTO_LOG.relative_to(OUTPUTS.parent)}\n")
     print(pd.crosstab(log["system"], log["guessed_cause"]).to_string())
     return 0
 
