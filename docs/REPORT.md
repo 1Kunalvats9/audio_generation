@@ -1,5 +1,10 @@
 # Phonetic-Guided Speech Generation — Project Report
 
+> **This is the plain-language companion document, not the submission.** The graded report is
+> the IEEE-format paper in [`docs/report/`](report/) (`main.tex` → `main.pdf`). This file covers
+> the same work in ordinary English and adds the viva preparation section, which does not belong
+> in a conference paper. Every number in both comes from the same CSVs in `outputs/results/`.
+
 **Course:** Advanced Machine Learning
 **Dataset:** LJSpeech 1.1 (13,100 clips, 23.92 hours, one speaker)
 **Code:** this repository · **Anchor paper:** Ren et al., *FastSpeech 2* (ICLR 2021)
