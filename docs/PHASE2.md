@@ -331,3 +331,100 @@ mel        = torch.randn(B, 80, T)    # M4 produces this
 ```
 
 Match those shapes and the pieces will fit together on the first try.
+
+---
+
+## 12. Your next task — pick yours and start
+
+The foundation is built and committed. **Everything below can be written in parallel**, because
+every interface is fixed and every module can be developed against fake tensors.
+
+`tests/test_dl_contracts.py` already contains the tests your module must pass. They are skipped
+until your file exists, then activate automatically:
+
+```bash
+pytest tests/test_dl_contracts.py -rs     # shows which modules are still missing
+```
+
+That is your definition of done. Write the module, run that file, and commit when it is green.
+
+### Done already
+
+| Owner | Module | Status |
+| --- | --- | --- |
+| M1 Kunal | `src/dl/vocab.py`, `mel_stats.py`, `dataset.py`, `configs/dl.yaml` | done · 25 tests |
+| M2 Tanishk | `src/dl/encoder.py` — encoder + length regulator | done · 20 tests |
+
+### M3 — Pushkar + Kunal — `src/dl/duration_predictor.py`
+
+The FastSpeech 2 variance adaptor: predict each phoneme's duration from the encoder output.
+
+```python
+class DurationPredictor(nn.Module):
+    def __init__(self, hidden: int = HIDDEN, layers: int = 2, kernel: int = 3, dropout: float = 0.5)
+    def forward(self, enc_out, phone_mask) -> Tensor   # (B, P, H), (B, P) -> (B, P) LOG durations
+
+def duration_loss(pred_log, target, mask) -> Tensor    # masked MSE in log space, scalar
+```
+
+1. Two masked 1-D conv layers + ReLU + LayerNorm + dropout, then a linear projection to 1.
+   **Copy the masking pattern from `src/dl/encoder.py`** — `_zero_pad` before every convolution.
+   A contract test checks you are batch-independent.
+2. Predict **log** duration, as the dataset's targets are in frames and the distribution is
+   skewed. Phase 1 made the same choice for the same reason.
+3. `duration_loss` must ignore padded phonemes entirely — a test puts garbage in a padded slot
+   and asserts the loss does not move.
+4. **The result worth reporting:** convert predictions to frames with
+   `src.audio.adjust_durations` (phase 1's function, already written and tested) and compare MAE
+   against phase 1's **19.65 ms** on the same test split. Does a jointly-trained neural predictor
+   beat engineered features plus boosted trees? Either answer is publishable.
+5. Do **not** touch `src/baseline/duration_models.py` — the phase 1 number has to stay honest.
+
+### M4 — Shaurya — `src/dl/decoder.py`, then `train.py`, then `diffusion.py`  ← critical path
+
+```python
+class MelDecoder(nn.Module):
+    def __init__(self, hidden: int = HIDDEN, layers: int = DECODER_LAYERS, kernel: int = DECODER_KERNEL)
+    def forward(self, frames, frame_mask) -> Tensor    # (B, T, H), (B, T) -> (B, 80, T)
+
+def mel_loss(pred, target, frame_mask) -> Tensor       # masked L1, scalar
+```
+
+1. **`decoder.py` first.** A residual conv stack over the time axis, then project `H -> 80`.
+   Output is channels-first `(B, 80, T)` to match the dataset's `mel`. Mask padded frames to zero.
+2. **`train.py` next.** AdamW, gradient clipping from `configs/dl.yaml`, and **checkpoint +
+   resume from the very first commit** — laptops sleep and Colab disconnects. Log to
+   `outputs/results/train_log.csv` as `step, train_loss, val_loss, lr`.
+3. **Gate before any long run: deliberately overfit 10 clips.** If the model cannot nearly
+   reproduce ten training examples, something is miswired and a twelve-hour run only wastes a day.
+4. Synthesise into `outputs/audio/D1/` for the same 100 `test_100` clips. **Call
+   `MelStats.denormalise()` before the vocoder** — the dataset hands you normalised mels and
+   HiFi-GAN expects raw log-mels.
+5. **Only then `diffusion.py`** for D2: a U-Net denoiser over the mel, cosine schedule, 50
+   sampling steps to start.
+
+### M5 — Chaitanya — `src/eval/mcd.py` and the harness extensions
+
+```python
+def mel_cepstral_distortion(pred, true) -> float       # (80, T), (80, T) -> dB
+```
+
+1. **MCD.** It was the wrong metric in phase 1 — averaged templates would only have said "very
+   different" — but now that we predict mels directly it measures exactly what the model
+   optimises. Explaining *why the right metric changed between phases* is strong report material.
+2. Add `"D1"` and `"D2"` to `SYSTEM_DIRS` in `src/eval/whisper_wer.py` and to `SYSTEMS` in
+   `src/eval/make_results.py`. The harness was built to extend; this is a few lines.
+3. Plot train vs val loss from `train_log.csv` — the standard evidence we are not overfitting.
+4. **Re-run the listening study blind.** Shuffle the filenames so raters cannot tell which system
+   is which. Phase 1's report lists non-blindness as a limitation; fixing it is cheap and removes
+   a caveat from the paper.
+5. `notebooks/04_phase2_demo.ipynb` — same idea as your phase 1 demo, with D1/D2 added.
+
+### Rules that keep five people from colliding
+
+- **Only touch your own files.** The contracts in §11 and §12 are the interfaces; if you need one
+  changed, say so in the group rather than changing it locally.
+- **Branch per part** (`dl-durations`, `dl-decoder`, `dl-eval`), merge by PR, same as phase 1.
+- **`make test` must stay green** before you push. It is 215 tests now.
+- **Never edit `configs/base.yaml`, `phone_vocab.json` or `mel_stats.json`.** Changing any of them
+  invalidates every checkpoint anyone has trained.
