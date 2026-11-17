@@ -7,6 +7,9 @@ data/*
 data/cache/*
 !data/cache/phones.csv
 !data/cache/excluded.csv
+# Phase 2 frozen contracts: tiny, and every member must use the identical file
+!data/cache/phone_vocab.json
+!data/cache/mel_stats.json
 outputs/audio/
 pretrained_models/
 __pycache__/

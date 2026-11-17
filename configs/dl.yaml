@@ -1,0 +1,52 @@
+# Phase 2 (deep learning) settings.
+#
+# configs/base.yaml is FROZEN and unchanged — sample rate, hop, n_mels and the
+# splits all still come from there. This file only adds what phase 2 needs.
+# Nothing here may be hard-coded in a model file; import it from src.dl.config.
+
+seed: 42
+
+vocab:
+  pad_symbol: "<pad>"
+  pad_id: 0                  # phones get ids 1..70, so 0 is always padding
+
+data:
+  debug_clips: 200           # size of the laptop-sized subset everyone develops against
+  max_frames: 1000           # clips longer than this are skipped during training (11.6 s)
+  num_workers: 2
+  bucket_batches: true       # group similar lengths so batches are not mostly padding
+
+model:
+  hidden: 192                # H, the width shared by encoder, duration predictor and decoder
+  encoder_layers: 4
+  encoder_kernel: 5
+  decoder_layers: 6
+  decoder_kernel: 5
+  dropout: 0.1
+
+duration_predictor:
+  layers: 2
+  kernel: 3
+  dropout: 0.5
+
+train:
+  batch_size: 16
+  lr: 3.0e-4
+  weight_decay: 0.01
+  grad_clip: 1.0
+  max_steps: 60000
+  warmup_steps: 2000
+  log_every: 50
+  val_every: 1000
+  ckpt_every: 2000
+
+diffusion:                   # D2 only; D1 ignores this block
+  train_steps: 1000
+  sample_steps: 50
+  schedule: cosine
+
+paths:
+  vocab: data/cache/phone_vocab.json
+  mel_stats: data/cache/mel_stats.json
+  checkpoints: outputs/checkpoints
+  train_log: outputs/results/train_log.csv

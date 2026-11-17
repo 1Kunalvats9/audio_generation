@@ -243,10 +243,11 @@ is an acceptable outcome and far better than a half-trained model nobody can exp
 
 ## 9. Day-one checklist
 
-- [ ] **Everyone:** `git pull`, confirm `make test` passes (170 tests)
-- [ ] **Everyone:** run `torch.cuda.is_available()` and post the result in the group — we need to
-      know today who has a GPU
-- [ ] **Kunal:** freeze `phone_vocab.json` and `configs/dl.yaml`, announce the tensor conventions
+- [ ] **Everyone:** `git pull`, then `make test` (195 tests) and `make dl-prep`
+- [ ] **Everyone:** run `python -m src.dl.config` and post the reported device in the group — we
+      need to know today who has a GPU
+- [x] **Kunal:** ~~freeze `phone_vocab.json` and `configs/dl.yaml`, announce the tensor
+      conventions~~ — **done, see §11**
 - [ ] **Tanishk:** write the length regulator and its unit test against fake tensors
 - [ ] **Pushkar:** read FastSpeech 2 §2.2 (the variance adaptor) — that is the component we are building
 - [ ] **Shaurya:** decoder skeleton that takes `(B, T, H)` and returns `(B, 80, T)` of the right shape,
@@ -269,3 +270,64 @@ strongest thing we can say about the project as a whole.
 **Reference:** Ren et al., *FastSpeech 2*, ICLR 2021 — <https://arxiv.org/abs/2006.04558>.
 Sections 2.2 (variance adaptor) and 2.3 (the decoder) describe almost exactly the architecture D1
 implements.
+
+
+---
+
+## 11. The skeleton is built — start here
+
+`make dl-prep` regenerates everything below in about a minute.
+
+| File | What it gives you |
+| --- | --- |
+| `configs/dl.yaml` | every phase-2 hyper-parameter. Nothing hard-coded in a model file |
+| `src/dl/config.py` | loads it, and `device()` picks cuda → mps → cpu |
+| `src/dl/vocab.py` | `PhoneVocab.load()` — 71 ids, **padding is id 0** |
+| `src/dl/mel_stats.py` | `MelStats.load()` — per-band mean/std over the training split only |
+| `src/dl/dataset.py` | `make_loader("train")` — padded batches with masks and length bucketing |
+| `filelists/debug_200.txt` | 200 training clips, so your code runs in seconds on any laptop |
+
+`data/cache/phone_vocab.json` and `mel_stats.json` are **committed** (a `.gitignore` exception),
+so everyone trains against byte-identical files. Changing either invalidates every checkpoint.
+
+### The batch you will receive
+
+```python
+from src.dl.dataset import make_loader
+batch = next(iter(make_loader("debug_200", batch_size=4)))
+
+batch["phone_ids"]    # (B, P)      int64   0 = padding
+batch["durations"]    # (B, P)      int64   0 where padded
+batch["mel"]          # (B, 80, T)  float32 NORMALISED
+batch["phone_mask"]   # (B, P)      bool    True = real phoneme
+batch["frame_mask"]   # (B, T)      bool    True = real frame
+batch["n_phones"]     # (B,)        int64
+batch["n_frames"]     # (B,)        int64
+batch["clip_ids"]     # list[str]
+```
+
+Guaranteed by assertions in `collate`, so a violation fails there rather than inside your model:
+`durations[b].sum() == n_frames[b]`, `phone_mask == (phone_ids != 0)`, padded slots are zero.
+
+### Two traps already handled, worth knowing about
+
+1. **`mel` is normalised; HiFi-GAN expects raw log-mels.** Always `MelStats.denormalise(x)` before
+   the vocoder. Getting this wrong produces audio that sounds plausible but is subtly wrong — the
+   same class of bug as phase 1's mel-recipe mismatch.
+2. **Durations are the MFA ground truth.** At training time the model is handed the true
+   alignment; only at synthesis does M3's predictor supply them. Train/inference mismatch here is
+   the classic TTS bug.
+
+### Write your module against fake tensors
+
+Nobody needs to wait for anyone else:
+
+```python
+import torch
+B, P, T, H = 4, 40, 300, 192
+enc_out    = torch.randn(B, P, H)     # M2 produces this
+frame_out  = torch.randn(B, T, H)     # after the length regulator
+mel        = torch.randn(B, 80, T)    # M4 produces this
+```
+
+Match those shapes and the pieces will fit together on the first try.

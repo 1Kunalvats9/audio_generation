@@ -85,4 +85,5 @@ templates:   ; $(PY) -m src.baseline.phoneme_templates
 synth:       ; $(PY) -m src.baseline.synthesize_baseline
 wer:         ; $(PY) -m src.eval.whisper_wer --all
 results:     ; $(PY) -m src.eval.make_results
+dl-prep:     ; $(PY) -m src.dl.vocab && $(PY) -m src.dl.mel_stats && $(PY) -m src.dl.dataset
 test:        ; $(PY) -m pytest tests
