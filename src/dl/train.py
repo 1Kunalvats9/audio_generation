@@ -146,6 +146,7 @@ def evaluate(model, loader, target_device):
     was_training = model.training
     state = rng_state()
     model.eval()
+    seed_everything()  # identical validation noise/timesteps for D2 at every step
     total = count = 0
     try:
         for batch in loader:
@@ -312,7 +313,7 @@ def main():
         initial = None
     if initial is None:
         initial = evaluate(model, val_loader, args.device)
-    meta = dict(initial_loss=initial, overfit=args.overfit, split=split,
+    meta = dict(initial_loss=initial, overfit=args.overfit, gate_passed=False, split=split,
                 clip_ids=[x[0] for x in train_loader.dataset.items])
     result = fit(model, train_loader, val_loader, max_steps=args.steps, target_device=args.device,
                  checkpoint_dir=directory, log_path=args.log or (
