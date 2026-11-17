@@ -353,6 +353,7 @@ That is your definition of done. Write the module, run that file, and commit whe
 | Owner | Module | Status |
 | --- | --- | --- |
 | M1 Kunal | `src/dl/vocab.py`, `mel_stats.py`, `dataset.py`, `configs/dl.yaml` | done · 25 tests |
+| M1 Kunal | `src/dl/g2p.py` — text → phonemes for unseen sentences | done · 21 tests |
 | M2 Tanishk | `src/dl/encoder.py` — encoder + length regulator | done · 20 tests |
 
 ### M3 — Pushkar + Kunal — `src/dl/duration_predictor.py`
@@ -428,3 +429,59 @@ def mel_cepstral_distortion(pred, true) -> float       # (80, T), (80, T) -> dB
 - **`make test` must stay green** before you push. It is 215 tests now.
 - **Never edit `configs/base.yaml`, `phone_vocab.json` or `mel_stats.json`.** Changing any of them
   invalidates every checkpoint anyone has trained.
+
+
+---
+
+## 13. Synthesising a sentence nobody recorded
+
+Phase 1 could only re-synthesise clips we already had MFA alignments for. `src/dl/g2p.py` closes
+that gap, so the phase 2 demo can be "type anything and it speaks" rather than "here are clips we
+rebuilt".
+
+```bash
+python -m src.dl.g2p "Hello, this is our project."
+```
+
+```python
+from src.dl.g2p import G2P
+g2p = G2P()
+ids = g2p.encode("Hello, this is our project.")   # straight into the encoder
+```
+
+### Pronunciations come from the corpus first, and that matters
+
+Three sources, in priority order:
+
+1. **`data/cache/lexicon.json`** — the pronunciation MFA *actually used*, read off `phones.csv`
+   and built from the training split only.
+2. **`configs/oov.dict`** — M2's 366 hand-written pronunciations.
+3. **CMUdict / neural `g2p_en`** — anything still unseen.
+
+The first source is not a convenience, it is a correctness fix. Forced alignment picks between
+pronunciation variants *by listening*, so MFA gives function words their reduced forms. A plain
+dictionary cannot know which variant was spoken and returns the citation form, so the phoneme
+sequence disagrees with everything the model trained on.
+
+Measured against MFA's own output on 100 clips of the held-out book:
+
+| | dictionary only | with the corpus lexicon |
+| --- | --- | --- |
+| exact phoneme-sequence match | 1% | **14%** |
+| mean sequence similarity | 0.937 | **0.974** |
+| clips ≥95% similar | 33% | **86%** |
+
+It does not reach 100%, and it cannot: MFA chooses a variant per occurrence from the audio, while
+a lexicon can only store the majority one. That residual difference is the honest limit of
+generating phonemes from text alone, and it is worth a sentence in the report.
+
+### Silence follows the corpus, not intuition
+
+Measured over all 13,100 training clips: **100% end with silence**, only **31% begin** with one,
+and the median clip contains 4. So `phonemes()` always appends a trailing `sil`, leaves the
+leading one off by default, and turns punctuation into `sil`.
+
+### Regenerating
+
+`make dl-prep` rebuilds the vocabulary, the mel statistics and the lexicon. `lexicon.json` is
+derived from the committed `phones.csv`, so it is not itself committed.

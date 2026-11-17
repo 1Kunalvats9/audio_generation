@@ -39,3 +39,4 @@ jiwer
 jupyter
 ipykernel
 pytest
+g2p_en            # text -> ARPAbet phonemes for synthesising unseen sentences (phase 2)

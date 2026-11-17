@@ -10,6 +10,7 @@ data/cache/*
 # Phase 2 frozen contracts: tiny, and every member must use the identical file
 !data/cache/phone_vocab.json
 !data/cache/mel_stats.json
+# lexicon.json is derived from phones.csv; `make dl-prep` rebuilds it
 outputs/audio/
 pretrained_models/
 __pycache__/
