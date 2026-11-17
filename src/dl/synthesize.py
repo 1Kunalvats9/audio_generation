@@ -16,7 +16,7 @@ import torch
 from src.config import CACHE_DIR, METADATA_CLEAN, OUTPUTS
 from src.dl.config import device
 from src.dl.mel_stats import MelStats
-from src.dl.train import load_checkpoint
+from src.dl.train import load_checkpoint, seed_everything
 from src.dl.vocab import PhoneVocab
 from src.utils import read_filelist
 
@@ -109,6 +109,7 @@ def main():
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--sample-steps", type=int)
     args = parser.parse_args()
+    seed_everything()
     model, state = load_checkpoint(args.checkpoint, target_device=args.device)
     if state["metadata"].get("overfit"):
         parser.error("use a full-training checkpoint for held-out evaluation, not the ten-clip sanity model")

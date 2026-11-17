@@ -97,3 +97,27 @@ def test_validation_restores_training_mode():
     model.train()
     assert evaluate(model, loader(), "cpu") > 0
     assert model.training
+
+
+def test_end_to_end_model_overfits_ten_synthetic_examples(tmp_path):
+    """Wiring check only: real LJSpeech overfit remains a separate CLI gate."""
+    seed_everything()
+    lookup = torch.randn(31, N_MELS)
+    items = []
+    for i in range(10):
+        ids = torch.tensor([3 * i + 1, 3 * i + 2, 3 * i + 3])
+        durations = torch.tensor([2, 3, 4])
+        mel = lookup[ids - 1].repeat_interleave(durations, dim=0).T.contiguous()
+        items.append(dict(clip_id=f"synthetic_{i}", phone_ids=ids,
+                          durations=durations, mel=mel))
+    data = DataLoader(items, batch_size=10, collate_fn=collate)
+    model = AcousticModel(32, hidden=32)
+    initial = evaluate(model, data, "cpu")
+    fit(model, data, data, max_steps=400, checkpoint_dir=tmp_path,
+        log_path=tmp_path / "synthetic.csv", lr=0.003, warmup_steps=20,
+        log_every=100, val_every=100, ckpt_every=400)
+    final = evaluate(model, data, "cpu")
+    assert final < initial * 0.1
+    # A synthetic test must never create a checkpoint claiming a real-data gate.
+    _, state = load_checkpoint(tmp_path / "latest.pt")
+    assert not state["metadata"].get("gate_passed", False)
