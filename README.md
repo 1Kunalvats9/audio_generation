@@ -273,6 +273,8 @@ samples/              a few final wavs per system to listen to
 
 **Who does what, in detail, and in what order: [TEAM.md](TEAM.md).**
 
+**Phase 2 (deep learning) plan: [docs/PHASE2.md](docs/PHASE2.md).**
+
 ---
 
 ## Troubleshooting
