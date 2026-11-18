@@ -19,7 +19,7 @@ import pandas as pd
 from src.config import OUTPUTS
 
 RESULTS_DIR = OUTPUTS / "results"
-SYSTEMS = ["R0", "R1", "A1", "A2"]
+SYSTEMS = ["R0", "R1", "A1", "A2", "D1", "D1_oracle", "D2"]
 
 
 def load_wer_results() -> dict[str, pd.DataFrame]:
@@ -47,13 +47,33 @@ def load_duration_mae() -> dict[str, float]:
     return mae_dict
 
 
-def build_summary_table(wer_dfs: dict[str, pd.DataFrame], mae_dict: dict[str, float]) -> pd.DataFrame:
+def load_mcd() -> dict[str, float]:
+    """Mel cepstral distortion per system, if src/eval/mcd.py has been run."""
+    mcd_file = RESULTS_DIR / "mcd.csv"
+    out = {}
+    if mcd_file.exists():
+        try:
+            df = pd.read_csv(mcd_file)
+            if "system" in df.columns and "mcd_db" in df.columns:
+                for _, row in df.iterrows():
+                    out[row["system"]] = float(row["mcd_db"])
+        except Exception as e:
+            print(f"Warning reading {mcd_file}: {e}", file=sys.stderr)
+    return out
+
+
+def build_summary_table(wer_dfs: dict[str, pd.DataFrame], mae_dict: dict[str, float],
+                        mcd_dict: dict[str, float] | None = None) -> pd.DataFrame:
+    mcd_dict = mcd_dict or {}
     rows = []
     system_descriptions = {
         "R0": "Real recording (sanity check)",
         "R1": "Real mel -> HiFi-GAN (copy synth)",
         "A1": "Phoneme templates + true MFA durations",
         "A2": "Phoneme templates + predicted durations",
+        "D1": "Neural decoder (D1)",
+        "D1_oracle": "Neural decoder + true MFA durations",
+        "D2": "Mel diffusion (D2)",
     }
 
     for sys_name in SYSTEMS:
@@ -65,6 +85,7 @@ def build_summary_table(wer_dfs: dict[str, pd.DataFrame], mae_dict: dict[str, fl
             n_clips = len(df)
             dur_mae = mae_dict.get(sys_name, None)
             dur_str = f"{dur_mae:.2f} ms" if dur_mae is not None else "-"
+            mcd = mcd_dict.get(sys_name, None)
             rows.append({
                 "System": sys_name,
                 "Description": desc,
@@ -72,15 +93,19 @@ def build_summary_table(wer_dfs: dict[str, pd.DataFrame], mae_dict: dict[str, fl
                 "Mean WER (%)": round(mean_wer, 2),
                 "Mean CER (%)": round(mean_cer, 2),
                 "Duration MAE": dur_str,
+                "MCD (dB)": f"{mcd:.2f}" if mcd is not None else "-",
             })
         else:
+            mcd = mcd_dict.get(sys_name, None)
             rows.append({
                 "System": sys_name,
                 "Description": desc,
                 "Clips": 0,
                 "Mean WER (%)": "-",
                 "Mean CER (%)": "-",
-                "Duration MAE": "-",
+                # duration MAE and MCD do not need WER rows to exist
+                "Duration MAE": f"{mae_dict[sys_name]:.2f} ms" if sys_name in mae_dict else "-",
+                "MCD (dB)": f"{mcd:.2f}" if mcd is not None else "-",
             })
 
     return pd.DataFrame(rows)
@@ -116,7 +141,8 @@ def main() -> int:
         return 1
 
     mae_dict = load_duration_mae()
-    summary_df = build_summary_table(wer_dfs, mae_dict)
+    mcd_dict = load_mcd()
+    summary_df = build_summary_table(wer_dfs, mae_dict, mcd_dict)
 
     summary_csv = RESULTS_DIR / "summary.csv"
     summary_df.to_csv(summary_csv, index=False)

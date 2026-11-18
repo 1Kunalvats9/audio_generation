@@ -1,5 +1,8 @@
-System,Description,Clips,Mean WER (%),Mean CER (%),Duration MAE
-R0,Real recording (sanity check),100,1.85,0.71,-
-R1,Real mel -> HiFi-GAN (copy synth),100,2.48,0.95,-
-A1,Phoneme templates + true MFA durations,100,23.65,11.83,0.00 ms
-A2,Phoneme templates + predicted durations,100,21.15,10.02,19.65 ms
+System,Description,Clips,Mean WER (%),Mean CER (%),Duration MAE,MCD (dB)
+R0,Real recording (sanity check),100,1.85,0.71,-,-
+R1,Real mel -> HiFi-GAN (copy synth),100,2.48,0.95,-,-
+A1,Phoneme templates + true MFA durations,100,23.65,11.83,0.00 ms,43.86
+A2,Phoneme templates + predicted durations,100,21.15,10.02,19.65 ms,63.04
+D1,Neural decoder (D1),100,3.74,1.05,-,30.14
+D1_oracle,Neural decoder + true MFA durations,100,2.37,0.63,-,-
+D2,Mel diffusion (D2),100,123.17,93.18,-,67.57

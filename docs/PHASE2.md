@@ -354,6 +354,9 @@ That is your definition of done. Write the module, run that file, and commit whe
 | --- | --- | --- |
 | M1 Kunal | `src/dl/vocab.py`, `mel_stats.py`, `dataset.py`, `configs/dl.yaml` | done · 25 tests |
 | M1 Kunal | `src/dl/g2p.py` — text → phonemes for unseen sentences | done · 21 tests |
+| M3 Pushkar + Kunal | `src/dl/duration_predictor.py` — variance adaptor | done · contract green |
+| M4 Shaurya | `src/dl/decoder.py`, `train.py`, `diffusion.py`, `synthesize.py` | done · contract green |
+| M5 Chaitanya | `src/eval/mcd.py`, D1/D2 in the harness, `notebooks/04_phase2_demo.ipynb` | done |
 | M2 Tanishk | `src/dl/encoder.py` — encoder + length regulator | done · 20 tests |
 
 ### M3 — Pushkar + Kunal — `src/dl/duration_predictor.py`
@@ -485,3 +488,71 @@ leading one off by default, and turns punctuation into `sil`.
 
 `make dl-prep` rebuilds the vocabulary, the mel statistics and the lexicon. `lexicon.json` is
 derived from the committed `phones.csv`, so it is not itself committed.
+
+
+---
+
+## 14. Status — the ten-clip gate passed on real data
+
+Shaurya's `--overfit` gate is the check that had to pass before any long run, and it does:
+
+```
+ten-clip gate: initial=0.929899  final=0.074257  passed=True
+```
+
+A ratio of 0.080 against a 0.1 threshold, on ten real LJSpeech clips. The architecture can fit
+the data, so a full run is worth the hours. The gate also refuses correctly: pointing a
+`--joint-durations` run at a checkpoint trained without the duration predictor is rejected,
+because the architecture differs.
+
+**One thing the first attempt got wrong, worth knowing.** A 400-step overfit reported
+`passed=False` at a ratio of 0.36, which looks like a broken model. It was not — the learning
+rate was still in warmup (`lr=6e-05` against a target of `3e-4` over 2000 warmup steps). The
+model had barely started. Anyone running the gate should give it at least 4000 steps, or lower
+`warmup_steps` for overfit runs specifically.
+
+### MCD is measured before the vocoder, and this matters
+
+The obvious implementation scores the synthesised *audio* by re-analysing it into a mel. That is
+wrong here, and measurably so: a real mel pushed through HiFi-GAN and re-analysed comes back with
+a log-mel MAE of about **1.4**, which is larger than the difference between the acoustic models we
+are comparing. Scored that way, A1 came out *better* than R1 — impossible, since R1 is a
+near-perfect copy.
+
+`src/eval/mcd.py` therefore scores the **predicted mel, before the vocoder**, which isolates what
+the acoustic model actually produces. With that fix the ordering is sensible:
+
+| | MCD (dB) |
+| --- | --- |
+| chance — two unrelated real clips | 86.14 |
+| A1 templates + measured durations | 43.86 |
+| A2 templates + predicted durations | 63.04 |
+
+The chance row exists because our coefficients are the DCT of an 80-band log-mel rather than the
+SPTK mel-generalised cepstrum most papers use, so the absolute numbers are not comparable to a
+published 4–8 dB. The control fixes the scale: it is what a system scores when its output has
+nothing to do with the target. A1 at roughly half of chance is capturing real structure.
+
+
+---
+
+## 15. Hearing it: `src/dl/speak.py`
+
+The one entry point that is **fully autonomous**. Everywhere else predicted durations are rescaled
+so a clip matches its real recording's length — oracle information a deployed system would not
+have. Here there is no recording, so the model's own durations decide how long the audio is.
+
+```bash
+python -m src.dl.speak "Hello, this is our project." -o samples/spoken/mine.wav
+```
+
+```
+text → G2P → phoneme ids → encoder → duration predictor → length regulator
+                                                               ↓
+                                              decoder → mel → HiFi-GAN → wav
+```
+
+Five demo sentences live in `samples/spoken/`, and **all five come back word-perfect through
+Whisper**, including "13100" spoken as thirteen thousand one hundred. That is the single most
+convincing thing to show: phase 1 could only re-synthesise clips it already had alignments for,
+and this types a new sentence and speaks it.

@@ -232,7 +232,24 @@ each tagged with a guessed cause and the measured evidence behind it
 reference-normalisation artifacts, R1 adds a few vocoder artefacts, and A1/A2 are dominated by
 flat prosody — which is what an averaged-template acoustic model predicts.
 
-**Listen:** `samples/` has the best, median and worst `test_100` clip in all four systems.
+**Listen: [`samples/`](samples/)** — start with `samples/spoken/`, five sentences nobody ever
+recorded, generated from text alone and all transcribed back word-perfect by Whisper. Then
+`samples/comparison/` plays one sentence through every system so you can hear phase 1 → phase 2.
+[`samples/README.md`](samples/README.md) is the listening guide.
+
+### Run it live
+
+```bash
+python demo.py
+```
+
+Loads the model once, speaks the sentences at the top of [`demo.py`](demo.py), then prompts for
+more — type a sentence, hear it about a second later. Edit the `SENTENCES` list to change what it
+opens with, or `python demo.py "Say this instead."` for a one-shot.
+
+```bash
+python -m src.dl.speak "Say anything you like." -o samples/spoken/mine.wav   # save without playing
+```
 
 ---
 

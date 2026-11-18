@@ -35,6 +35,11 @@ SYSTEM_DIRS = {
     "R1": OUTPUTS / "audio" / "R1",
     "A1": OUTPUTS / "audio" / "A1",
     "A2": OUTPUTS / "audio" / "A2",
+    # phase 2: the learned acoustic models
+    "D1": OUTPUTS / "audio" / "D1",
+    "D2": OUTPUTS / "audio" / "D2",
+    # oracle-duration ablations: same acoustic model, MFA durations instead of predicted
+    "D1_oracle": OUTPUTS / "audio" / "D1_oracle",
 }
 
 RESULTS_DIR = OUTPUTS / "results"
@@ -174,7 +179,7 @@ def run_evaluation(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--system", choices=["R0", "R1", "A1", "A2"], help="Evaluate a specific system")
+    parser.add_argument("--system", choices=["R0", "R1", "A1", "A2", "D1", "D2", "D1_oracle"], help="Evaluate a specific system")
     parser.add_argument("--all", action="store_true", help="Evaluate all available systems")
     parser.add_argument("--filelist", default="test_100", help="Clip list to evaluate (default: test_100)")
     parser.add_argument("--audio-dir", type=Path, default=None, help="Custom audio directory for evaluation")
@@ -184,7 +189,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.all:
-        systems = ["R0", "R1", "A1", "A2"]
+        systems = ["R0", "R1", "A1", "A2", "D1", "D2", "D1_oracle"]
     elif args.system:
         systems = [args.system]
     else:

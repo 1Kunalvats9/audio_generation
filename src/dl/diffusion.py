@@ -72,6 +72,10 @@ class MelDenoiser(nn.Module):
         return self.output(x).transpose(1, 2).masked_fill(~frame_mask[:, None, :], 0)
 
 
+# Normalised mels occupy about -3.4 .. +3.4 (mean 0, std 1 by construction), so this
+# bounds the predicted x0 generously without touching anything the data could produce.
+CLEAN_CLAMP = 4.0
+
 class MelDiffusion(nn.Module):
     def __init__(self, hidden=HIDDEN, train_steps=None, sample_steps=None):
         super().__init__()
@@ -123,6 +127,11 @@ class MelDiffusion(nn.Module):
                 predicted_noise = self.denoiser(x, t, frames, frame_mask)
                 alpha = self.alpha_bar[time]
                 clean = (x - (1 - alpha).sqrt() * predicted_noise) / alpha.sqrt()
+                # alpha_bar[T-1] is 2.4e-09, so this division amplifies any error in
+                # predicted_noise by ~20,000x on the first step and the sample diverges
+                # (we measured mels at +/-2787 where the data spans +/-3.4). Clamping the
+                # predicted clean signal to the data range is the standard DDIM guard.
+                clean = clean.clamp(-CLEAN_CLAMP, CLEAN_CLAMP)
                 previous = self.alpha_bar[grid[index + 1]] if index + 1 < steps else x.new_tensor(1.0)
                 x = previous.sqrt() * clean + (1 - previous).sqrt() * predicted_noise
                 x = x.masked_fill(~valid, 0)

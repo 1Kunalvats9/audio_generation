@@ -17,3 +17,5 @@ __pycache__/
 .ipynb_checkpoints/
 *.pyc
 .DS_Storedocs/report/pg-*.jpg
+# demo.py scratch output — regenerated every time it runs
+samples/live/

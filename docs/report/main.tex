@@ -40,6 +40,11 @@ By contrast, replacing real spectrograms with averaged phoneme templates cost 21
 points of word error rate and 2.32 MOS. We conclude that at
 this level of acoustic fidelity the acoustic model dominates duration accuracy by roughly a factor
 of thirty, and we report the alignment and significance diagnostics that support this claim.
+We then test that conclusion directly by replacing the templates with a learned decoder: word
+error rate falls from 21.15\,\% to 3.74\,\% ($p = 2{\times}10^{-15}$), within 1.3 points of the
+vocoder's own ceiling. With a competent acoustic model the duration source becomes measurable for
+the first time (2.37\,\% with oracle durations against 3.74\,\% with predicted, $p = 0.0014$),
+confirming that the coarse acoustic model had been masking it.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -445,6 +450,102 @@ corrupted 27 of 299 utterances, a type error that aborted synthesis, and an empt
 \texttt{NaN} that silently invalidated 61 of 70 templates. Each is now covered by a regression
 test.
 
+\section{Testing the Conclusion: a Learned Acoustic Model}
+\label{sec:phase2}
+
+The analysis above predicts where effort should go: into the acoustic model, not the duration
+model. We tested that prediction by replacing the phoneme templates with a trained decoder while
+holding everything else fixed --- the same phoneme input, the same MFA durations, the same frozen
+vocoder, the same 100 utterances.
+
+\subsection{The model}
+A convolutional encoder embeds the phoneme sequence; a length regulator repeats each phoneme's
+vector by its duration to reach the frame rate; a residual convolutional decoder predicts the
+80-band mel. A duration predictor in the style of FastSpeech~2's variance adaptor is trained
+jointly as an auxiliary loss. Training used 9{,}000 steps at batch size~8 on a laptop GPU
+(Apple MPS), roughly six epochs --- the model is deliberately described as undertrained, since
+train and validation loss were still falling together at 0.510 and 0.504 when the budget ran out.
+
+Before any long run we required the model to overfit ten real utterances, reaching a final/initial
+loss ratio of 0.080 against a 0.1 threshold. This gate is worth stating because a 400-step attempt
+failed it at 0.36 purely because the learning-rate warmup had not finished --- a failure that
+looks like a broken model and is not.
+
+\subsection{Results}
+
+\begin{table}[t]
+\caption{All systems. D1 replaces the templates with a learned decoder; everything else is
+unchanged. MCD is measured on the predicted mel, before the vocoder.}
+\label{tab:phase2}
+\centering
+\begin{tabular}{llrrr}
+\toprule
+\textbf{System} & \textbf{Acoustic model} & \textbf{WER} & \textbf{CER} & \textbf{MCD} \\
+\midrule
+R0 & --- (real recording)   & 1.85\,\%  & 0.71\,\%  & --- \\
+R1 & real mel $\rightarrow$ vocoder & 2.48\,\%  & 0.95\,\%  & --- \\
+A1 & templates, measured dur. & 23.65\,\% & 11.83\,\% & 43.86 \\
+A2 & templates, predicted dur. & 21.15\,\% & 10.02\,\% & 63.04 \\
+\textbf{D1} & \textbf{decoder, predicted dur.} & \textbf{3.74\,\%} & \textbf{1.05\,\%} & \textbf{30.14} \\
+D1$_\textrm{oracle}$ & decoder, measured dur. & 2.37\,\% & 0.63\,\% & --- \\
+D2 & diffusion, predicted dur. & 123.17\,\% & 93.18\,\% & 67.57 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{The acoustic model was indeed the bottleneck.} Holding durations fixed and swapping
+templates for the decoder moves WER from 21.15\,\% to 3.74\,\% (Wilcoxon $p = 2.2\times10^{-15}$),
+closing 83\,\% of the distance between A2 and the real recording and landing 1.3 points from the
+vocoder's own ceiling. MCD agrees independently: 30.14\,dB against 43.86\,dB for A1, where
+unrelated real utterances score 86.14\,dB.
+
+\textbf{Duration now matters, and it did not before.} This is the more interesting half.
+Section~\ref{sec:stats} could not distinguish measured from predicted durations under the
+template model ($p = 0.048$ one way, $0.100$ the other, and nominally in the wrong direction).
+Under the learned decoder the same contrast is clear: 2.37\,\% with oracle durations against
+3.74\,\% with predicted, better on 21 of 100 utterances and worse on 3, $p = 0.0014$.
+
+Section~\ref{sec:limits} speculated that ``an acoustic model this coarse masks duration effects
+entirely, and the variance adaptor's contribution would only become visible once the acoustic
+model is strong enough''. That is precisely what happened. The duration signal was always present;
+the instrument was too blunt to see it.
+
+\subsection{The diffusion model failed, with a diagnosis}
+D2 trains (validation loss 0.173) and produces statistically speech-like output --- standard
+deviation 0.97 against real speech's 0.93 --- yet scores 123\,\% WER, meaning the recogniser
+invents words. It learned what spectrograms look like in general without learning to condition on
+the phoneme sequence, the expected failure of a badly undertrained diffusion model at 9{,}000
+steps where such models ordinarily need hundreds of thousands.
+
+A genuine defect surfaced on the way. The first samples were pure clipping, at RMS 0.86 against
+0.067 for real speech. The DDIM update computes
+$\hat{x}_0 = (x - \sqrt{1-\bar\alpha}\,\hat\epsilon)/\sqrt{\bar\alpha}$, and with
+$\bar\alpha_{999} = 2.4\times10^{-9}$ that division amplifies any error in $\hat\epsilon$ by
+a factor of 20{,}291 on the first step; the sampled mels reached $\pm2787$ where the data spans
+$\pm3.4$. Clamping $\hat{x}_0$ to the data range --- the standard DDIM guard --- restored RMS to
+0.063. The magnitude is what identified this as arithmetic rather than undertraining: a model
+short of training degrades gradually, it does not overshoot by three orders of magnitude.
+
+We also note that MCD is structurally unkind to D2. An $L_1$-trained decoder predicts the
+conditional mean, which is exactly what minimises a distance-to-target measure, whereas diffusion
+samples variation by design. D2's 67.57\,dB therefore overstates the gap; its WER does not.
+
+\subsection{A negative result on the duration predictor}
+The jointly trained neural duration predictor reaches 23.81\,ms MAE on the test split against
+19.65\,ms for the gradient-boosted trees of Section~\ref{sec:features} --- \textbf{21\,\% worse}.
+We report this rather than quietly preferring the neural number. Three plausible causes: it was
+trained as an auxiliary loss for only 9{,}000 steps; it sees only the encoder's output, whereas
+the boosted trees were given 21 engineered features including the distance-to-silence pair that
+permutation importance identified as informative; and gradient boosting is a strong method on
+tabular problems. The classical baseline was not a straw man.
+
+\subsection{What this costs in honesty}
+D1 is undertrained, so these numbers are a lower bound on what the architecture can do rather than
+a converged result. The engineering constraint is worth recording: with no CUDA device available,
+training ran on a laptop GPU, and length-bucketed batches of 16 exhausted its 9\,GB memory limit,
+so batch size was halved. Bucketing reduces padding waste and concentrates the longest utterances
+into the same batch; those two effects pull against each other.
+
 \section{Conclusion and Future Work}
 \label{sec:future}
 
@@ -454,13 +555,22 @@ per-phone-mean baseline. Substituting those predictions for oracle durations pro
 measurable loss in either intelligibility or subjective naturalness, while the averaged-template
 acoustic model accounted for 21.17 percentage points of word error rate and 2.32 MOS.
 
-The practical implication is that further effort belongs in the acoustic model rather than in
-duration modelling. Diffusion-based generators~\cite{popov2021gradtts, liu2023audioldm} are the
-natural replacement, and the alignment and duration infrastructure developed here supplies exactly
-the conditioning signal such a model requires. Three concrete next steps follow: predict total
-utterance length so that A2 becomes autonomous; distribute the rescaling residual proportionally
-rather than onto a single segment; and repeat the listening study blind, with naive listeners and
-more utterances, once a stronger acoustic model makes prosodic differences perceptible.
+Section~\ref{sec:phase2} then acted on that finding rather than leaving it as advice. Replacing
+the templates with a learned decoder moved WER from 21.15\,\% to 3.74\,\%, confirming the
+attribution, and in doing so made the duration contrast measurable for the first time
+($p = 0.0014$, where the same contrast under templates was indistinguishable from noise). The
+project's two halves therefore form a single argument: the first measured which component
+mattered, and the second verified the measurement by fixing that component and watching the
+predicted effect appear.
+
+Three concrete next steps follow. Train the decoder to convergence --- ours stopped at roughly six
+epochs on a laptop GPU with train and validation loss still falling, so 3.74\,\% is a lower
+bound. Predict total utterance length so the system becomes fully autonomous, since durations are
+still rescaled to the true clip length. And repeat the listening study blind now that there is a
+system whose prosody is good enough for naturalness differences to be audible --- the condition
+Section~\ref{sec:limits} identified as missing. Latent diffusion~\cite{liu2023audioldm} remains
+the natural successor to the convolutional decoder, and the infrastructure built here supplies
+exactly the conditioning signal it requires.
 
 \section*{Contributions}
 

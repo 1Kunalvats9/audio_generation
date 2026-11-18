@@ -38,6 +38,17 @@ for (const s of ["R0", "R1", "A1", "A2"]) {
   mos[s] = v.reduce((a, b) => a + b, 0) / v.length;
 }
 
+for (const s2 of ["D1", "D1_oracle", "D2"]) {
+  const f = R(`wer_${s2}.csv`);
+  if (fs.existsSync(f)) {
+    const rows = readCsv(f);
+    const mean = (k) => rows.reduce((a, r) => a + Number(r[k]), 0) / rows.length;
+    wer[s2] = { wer: mean("wer") * 100, cer: mean("cer") * 100 };
+  }
+}
+const mcd = {};
+if (fs.existsSync(R("mcd.csv"))) for (const r of readCsv(R("mcd.csv"))) mcd[r.system] = Number(r.mcd_db);
+
 const imp = readCsv(R("feature_importance.csv"));
 const impOf = (name) => Number((imp.find((r) => r[""] === name) || {}).importance || 0);
 
@@ -217,46 +228,50 @@ pres.addSection({ title: "Models" });
 s = pres.addSlide({ masterName: "CONTENT_LIGHT", sectionTitle: "Models" });
 s.addText("The models we built", { placeholder: "title" });
 
-s.addText("The task:  given a phoneme and its context, predict how many frames it lasts  —  regression, 905,833 training examples",
-  { x: 0.7, y: 1.2, w: 11.9, h: 0.34, fontSize: 13, bold: true, color: C.accent3, isTextBox: true, margin: 0 });
-
-s.addText("We TRAINED these three", { x: 0.7, y: 1.68, w: 7.4, h: 0.3, fontSize: 12.5, bold: true, color: C.accent1, isTextBox: true, margin: 0 });
+s.addText("PHASE 1 — classical", { x: 0.7, y: 1.2, w: 5.9, h: 0.3, fontSize: 12.5, bold: true, color: C.accent1, isTextBox: true, margin: 0 });
+s.addText("Predict how long each phoneme lasts, then paste together one averaged spectrum per phone.",
+  { x: 0.7, y: 1.5, w: 5.9, h: 0.4, fontSize: 10.5, color: MUTED, isTextBox: true, margin: 0 });
 s.addTable([
-  [hdr("Model"), hdr("What it is"), hdr("Test MAE")],
-  [cell("Per-phone mean", { bold: true, color: "065A82" }), cell("average length of each phone type — the baseline to beat"), cell(pick(test,"mean","mae_ms").toFixed(2) + " ms", { bold: true })],
-  [cell("Ridge regression", { bold: true, color: "065A82" }), cell("linear model, one-hot categories, alpha tuned on validation"), cell(pick(test,"ridge","mae_ms").toFixed(2) + " ms", { bold: true })],
-  [cell("Boosted trees", { bold: true, color: "02C39A" }), cell("HistGradientBoosting, native category splits, stopped at 1,052 rounds"), cell(pick(test,"gbt","mae_ms").toFixed(2) + " ms", { bold: true, color: "02C39A" })],
-], { x: 0.7, y: 2.02, w: 7.4, colW: [1.75, 4.05, 1.6], rowH: 0.42, border: { type: "solid", color: LINE, pt: 1 }, margin: 0.07, objectName: "modelTable" });
+  [hdr("Duration model"), hdr("What it is"), hdr("Test MAE")],
+  [cell("Per-phone mean"), cell("average length of each phone — the baseline"), cell(pick(test,"mean","mae_ms").toFixed(2) + " ms")],
+  [cell("Ridge"), cell("linear, one-hot categories"), cell(pick(test,"ridge","mae_ms").toFixed(2) + " ms")],
+  [cell("Boosted trees", { bold: true, color: "02C39A" }), cell("21 text features, native category splits"), cell(pick(test,"gbt","mae_ms").toFixed(2) + " ms", { bold: true, color: "02C39A" })],
+], { x: 0.7, y: 1.92, w: 5.9, colW: [1.6, 3.0, 1.3], rowH: 0.38, border: { type: "solid", color: LINE, pt: 1 }, margin: 0.06, objectName: "durTable" });
+s.addText(improvement + "% better than the baseline. Acoustic model = 70 averaged phoneme templates (a lookup table, not learned).",
+  { x: 0.7, y: 3.46, w: 5.9, h: 0.5, fontSize: 10.5, color: INK, isTextBox: true, margin: 0 });
 
-s.addText([{ text: improvement + "% ", options: { fontSize: 20, bold: true, color: "02C39A" } },
-           { text: "better than the baseline. Ordering baseline > ridge > trees is the reassuring one —", options: { fontSize: 11.5, color: INK } },
-           { text: " if ridge had won we would have gone looking for a bug.", options: { fontSize: 11.5, color: INK, italic: true } }],
-  { x: 0.7, y: 3.82, w: 7.4, h: 0.6, isTextBox: true, margin: 0 });
-
-s.addText("21 features, all from the TEXT only", { x: 0.7, y: 4.5, w: 7.4, h: 0.3, fontSize: 12.5, bold: true, color: C.accent1, isTextBox: true, margin: 0 });
-s.addText([
-  { text: "the phone itself (with stress), the phone before and after, phone class, position in word and sentence, and distance to the nearest pause", options: { bullet: true, breakLine: true } },
-  { text: "we predict log(duration): most phones are ~7 frames but silences reach 481, so raw squared error would chase the pauses", options: { bullet: true, breakLine: true } },
-  { text: "NO feature uses the clip's true length — that would leak. A test triples every duration and checks the features are unchanged.", options: { bullet: true } },
-], { x: 0.7, y: 4.84, w: 7.4, h: 1.5, fontSize: 11, color: INK, paraSpaceAfter: 5, isTextBox: true, margin: 0 });
-
-card(s, 8.5, 1.68, 4.1, 4.6, "preCard");
-s.addText("We USED these, pre-trained", { x: 8.8, y: 1.86, w: 3.5, h: 0.3, fontSize: 12.5, bold: true, color: C.accent6, isTextBox: true, margin: 0 });
-s.addText("We did not train them — saying otherwise would be wrong.", { x: 8.8, y: 2.18, w: 3.5, h: 0.4, fontSize: 10, italic: true, color: MUTED, isTextBox: true, margin: 0 });
-const pre = [
-  ["MFA aligner", "finds where each phone starts and ends (our ground truth)"],
-  ["HiFi-GAN vocoder", "turns a spectrogram back into a waveform — frozen, so it is identical in every system"],
-  ["Whisper small.en", "transcribes our audio so we can score it — the ruler, not the subject"],
+s.addText("PHASE 2 — deep learning", { x: 6.9, y: 1.2, w: 5.7, h: 0.3, fontSize: 12.5, bold: true, color: C.accent2, isTextBox: true, margin: 0 });
+s.addText("Replace the lookup table with a trained network. Same inputs, same frozen vocoder.",
+  { x: 6.9, y: 1.5, w: 5.7, h: 0.4, fontSize: 10.5, color: MUTED, isTextBox: true, margin: 0 });
+const nn = [
+  ["Encoder", "reads the phoneme sequence  →  one vector per phone"],
+  ["Length regulator", "repeats each vector by its duration  →  one per frame"],
+  ["Duration predictor", "FastSpeech 2 variance adaptor, trained jointly"],
+  ["Decoder (D1)", "residual convolutions  →  the 80-band spectrogram"],
+  ["Diffusion (D2)", "U-Net denoiser over the same spectrogram"],
 ];
-let cy = 2.66;
-for (const [n, d] of pre) {
-  s.addText(n, { x: 8.8, y: cy, w: 3.5, h: 0.28, fontSize: 11.5, bold: true, color: C.accent3, isTextBox: true, margin: 0 });
-  s.addText(d, { x: 8.8, y: cy + 0.28, w: 3.5, h: 0.72, fontSize: 10, color: INK, isTextBox: true, margin: 0 });
-  cy += 1.1;
+let ny = 1.92;
+for (const [n, d] of nn) {
+  s.addText(n, { x: 6.9, y: ny, w: 1.9, h: 0.3, fontSize: 11, bold: true, color: C.accent3, isTextBox: true, margin: 0 });
+  s.addText(d, { x: 8.85, y: ny + 0.02, w: 3.75, h: 0.3, fontSize: 10, color: INK, isTextBox: true, margin: 0 });
+  ny += 0.37;
 }
-s.addText("Freezing the vocoder is experimental design, not laziness: if it changed between systems the A1 vs A2 comparison would mean nothing.",
-  { x: 8.8, y: 5.9, w: 3.5, h: 0.5, fontSize: 9.5, italic: true, color: MUTED, isTextBox: true, margin: 0 });
-s.addNotes("A fourth thing we fitted is the phoneme templates: for each of 70 phones we averaged every training occurrence into one 80x3 matrix. It is a non-parametric acoustic model - fitted from data, just not by gradient descent. Say this if asked what the acoustic model is.");
+s.addText("Trained end to end on 905,833 phonemes / 7.4M frames. 9,000 steps on a laptop GPU.",
+  { x: 6.9, y: 3.84, w: 5.7, h: 0.4, fontSize: 10.5, italic: true, color: MUTED, isTextBox: true, margin: 0 });
+
+card(s, 0.7, 4.3, 11.9, 2.0, "preCard");
+s.addText("We did NOT train these — they are pre-trained, and saying otherwise would be wrong",
+  { x: 1.0, y: 4.48, w: 11.3, h: 0.3, fontSize: 11.5, bold: true, color: C.accent6, isTextBox: true, margin: 0 });
+const pre = [["MFA aligner", "finds where each phone starts and ends (our ground truth)"],
+             ["HiFi-GAN vocoder", "spectrogram → waveform. FROZEN, so it is identical in every system"],
+             ["Whisper small.en", "transcribes our audio so we can score it — the ruler, not the subject"]];
+let py2 = 4.84;
+for (const [n, d] of pre) {
+  s.addText(n, { x: 1.0, y: py2, w: 2.3, h: 0.28, fontSize: 10.5, bold: true, color: C.accent3, isTextBox: true, margin: 0 });
+  s.addText(d, { x: 3.4, y: py2, w: 8.9, h: 0.28, fontSize: 10, color: INK, isTextBox: true, margin: 0 });
+  py2 += 0.36;
+}
+s.addNotes("The length regulator is the join that makes this work: it stretches a per-phoneme sequence onto the time axis, which is why durations are a first-class input rather than something the decoder has to guess. Freezing the vocoder is experimental design - if it changed between systems the comparison would mean nothing.");
 
 // ============================ 5 — how we measured ==========================
 pres.addSection({ title: "Metrics" });
@@ -264,90 +279,69 @@ s = pres.addSlide({ masterName: "CONTENT_LIGHT", sectionTitle: "Metrics" });
 s.addText("How we measured, and why these metrics", { placeholder: "title" });
 
 const metrics = [
-  ["MAE", "Mean Absolute Error", "average of |predicted − actual|, in frames and ms",
-   "Why not RMSE? It squares errors, so a few 481-frame silences would dominate. Why not MAPE? It divides by the true value, which explodes on 1-frame phones. Why not R²? Unitless — it cannot say “we are 19.65 ms off”.",
-   "duration models", "1C7293"],
-  ["WER / CER", "Word / Character Error Rate", "(substitutions + deletions + insertions) ÷ words",
-   "Whisper transcribes our audio; we compare to the truth. Why not MCD? It measures spectral distance, which would just say “very different” without telling us if it is understandable. CER is reported too because WER is harsh — one wrong letter kills a whole word.",
-   "intelligibility", "065A82"],
-  ["MOS", "Mean Opinion Score", "5 listeners × 5 clips, rated 1–5 for naturalness",
-   "WER is completely blind to sounding robotic. Audio can be 0% WER and still sound like a 1980s answering machine, so we need a human measure as well.",
-   "naturalness", "02C39A"],
-  ["Wilcoxon + paired t", "Significance tests", "is the A1 vs A2 difference real, or noise?",
-   "Paired, because the same clips go through both systems. Wilcoxon because per-clip WER is skewed, bounded at 0 and full of ties. We report BOTH because they disagree — quoting only the one under 0.05 would be cherry-picking.",
-   "both comparisons", "B85042"],
+  ["MAE", "duration models", "average of |predicted − actual|, in ms",
+   "Not RMSE: squaring lets a few 481-frame silences dominate. Not MAPE: it divides by the true value and explodes on 1-frame phones. Not R²: unitless, so it cannot say “we are 19.65 ms off”.", "1C7293"],
+  ["WER / CER", "intelligibility", "(substitutions + deletions + insertions) ÷ words",
+   "Whisper transcribes our audio and we compare to the truth. Not MCD alone: that measures spectral distance, not whether a listener could understand it. CER is shown too because WER is harsh — one wrong letter kills a whole word.", "065A82"],
+  ["MCD", "spectral accuracy", "distance between predicted and real spectra, in dB",
+   "New in phase 2: it was useless against averaged templates, but now the model predicts spectra directly it measures exactly what is optimised. Scored BEFORE the vocoder — the vocoder round-trip alone adds more error than the gap between models.", "02C39A"],
+  ["MOS", "naturalness", "5 listeners × 5 clips, rated 1–5",
+   "WER is blind to sounding robotic: audio can be 0% WER and still sound like an answering machine.", "97BC62"],
+  ["Wilcoxon + paired t", "is it real?", "the same clips through both systems",
+   "Paired because clip difficulty cancels. Wilcoxon because per-clip WER is skewed, bounded at 0 and full of ties. We report BOTH when they disagree — quoting only the one under 0.05 would be cherry-picking.", "B85042"],
 ];
-let my = 1.28;
-for (const [abbr, name, what, why, applies, col] of metrics) {
-  card(s, 0.7, my, 11.9, 1.26, "m" + abbr);
-  s.addText(abbr, { x: 0.92, y: my + 0.16, w: 1.55, h: 0.4, fontSize: 17, bold: true, color: col, isTextBox: true, margin: 0 });
-  s.addText(applies, { x: 0.92, y: my + 0.6, w: 1.55, h: 0.3, fontSize: 9.5, color: MUTED, isTextBox: true, margin: 0 });
-  s.addText(name, { x: 2.6, y: my + 0.14, w: 3.0, h: 0.3, fontSize: 11.5, bold: true, color: C.accent3, isTextBox: true, margin: 0 });
-  s.addText(what, { x: 2.6, y: my + 0.44, w: 3.0, h: 0.7, fontSize: 10, color: INK, isTextBox: true, margin: 0 });
-  s.addText(why, { x: 5.85, y: my + 0.16, w: 6.55, h: 0.95, fontSize: 10, color: INK, isTextBox: true, margin: 0 });
-  my += 1.36;
+let my = 1.22;
+for (const [abbr, applies, what, why, col] of metrics) {
+  card(s, 0.7, my, 11.9, 1.04, "m" + abbr);
+  s.addText(abbr, { x: 0.92, y: my + 0.12, w: 1.6, h: 0.32, fontSize: 15, bold: true, color: col, isTextBox: true, margin: 0 });
+  s.addText(applies, { x: 0.92, y: my + 0.5, w: 1.6, h: 0.28, fontSize: 9, color: MUTED, isTextBox: true, margin: 0 });
+  s.addText(what, { x: 2.65, y: my + 0.14, w: 3.0, h: 0.8, fontSize: 9.5, color: C.accent3, bold: true, isTextBox: true, margin: 0 });
+  s.addText(why, { x: 5.9, y: my + 0.12, w: 6.5, h: 0.84, fontSize: 9.5, color: INK, isTextBox: true, margin: 0 });
+  my += 1.12;
 }
 s.addText("We validated the ruler first: Whisper on the REAL recordings scored 1.85% WER. If that had come out at 40%, every other number would be worthless.",
-  { x: 0.7, y: 6.8, w: 11.9, h: 0.4, fontSize: 11, bold: true, italic: true, color: C.accent6, isTextBox: true, margin: 0 });
-s.addNotes("The training loss and the evaluation metric are deliberately different: we train on squared error in LOG space so long silences do not dominate the fit, but we report MAE in linear frames so the number stays interpretable. Mixing those up is a classic mistake; doing it on purpose is a good answer.");
+  { x: 0.7, y: 6.92, w: 11.9, h: 0.35, fontSize: 10.5, bold: true, italic: true, color: C.accent6, isTextBox: true, margin: 0 });
+s.addNotes("The training loss and the evaluation metric are deliberately different: we train on squared error in LOG space so long silences do not dominate the fit, but report MAE in linear frames so the number stays interpretable.");
 
 // ============================ 6 — results ==================================
 pres.addSection({ title: "Results" });
 s = pres.addSlide({ masterName: "CONTENT_LIGHT", sectionTitle: "Results" });
-s.addText("Results", { placeholder: "title" });
+s.addText("Results — every system, both phases", { placeholder: "title" });
 
-s.addText("1 — Duration model, on 299 clips from an unseen book", { x: 0.7, y: 1.2, w: 5.9, h: 0.3, fontSize: 12.5, bold: true, color: C.accent1, isTextBox: true, margin: 0 });
+const W = (k) => (wer[k] ? f2(wer[k].wer) + "%" : "—");
+const Cc = (k) => (wer[k] ? f2(wer[k].cer) + "%" : "—");
+const M = (k) => (mcd[k] !== undefined ? mcd[k].toFixed(1) : "—");
+const O = (k) => (mos[k] !== undefined ? f2(mos[k]) : "—");
 s.addTable([
-  [hdr("Model"), hdr("MAE frames"), hdr("MAE ms"), hdr("no silence")],
-  [cell("Per-phone mean"), cell(pick(test,"mean","mae_frames").toFixed(3)), cell(pick(test,"mean","mae_ms").toFixed(2)), cell(pick(test,"mean","mae_ms_nosil").toFixed(2))],
-  [cell("Ridge"), cell(pick(test,"ridge","mae_frames").toFixed(3)), cell(pick(test,"ridge","mae_ms").toFixed(2)), cell(pick(test,"ridge","mae_ms_nosil").toFixed(2))],
-  [cell("Boosted trees", { bold: true, color: "02C39A" }), cell(pick(test,"gbt","mae_frames").toFixed(3), { bold: true, color: "02C39A" }), cell(pick(test,"gbt","mae_ms").toFixed(2), { bold: true, color: "02C39A" }), cell(pick(test,"gbt","mae_ms_nosil").toFixed(2), { bold: true, color: "02C39A" })],
-], { x: 0.7, y: 1.54, w: 5.9, colW: [2.0, 1.35, 1.25, 1.3], rowH: 0.36, border: { type: "solid", color: LINE, pt: 1 }, margin: 0.06, objectName: "durTable" });
+  [hdr("System"), hdr("Acoustic model"), hdr("Durations"), hdr("WER"), hdr("CER"), hdr("MCD dB"), hdr("MOS")],
+  [cell("R0", { bold: true }), cell("— real recording"), cell("—"), cell(W("R0"), { bold: true }), cell(Cc("R0")), cell("—"), cell(O("R0"))],
+  [cell("R1", { bold: true }), cell("real spectrogram"), cell("real"), cell(W("R1"), { bold: true }), cell(Cc("R1")), cell("—"), cell(O("R1"))],
+  [cell("A1", { bold: true }), cell("70 averaged templates"), cell("measured"), cell(W("A1"), { bold: true }), cell(Cc("A1")), cell(M("A1")), cell(O("A1"))],
+  [cell("A2", { bold: true }), cell("70 averaged templates"), cell("predicted"), cell(W("A2"), { bold: true }), cell(Cc("A2")), cell(M("A2")), cell(O("A2"))],
+  [cell("D1", { bold: true, color: "02C39A" }), cell("NEURAL decoder", { bold: true, color: "02C39A" }), cell("predicted"), cell(W("D1"), { bold: true, color: "02C39A" }), cell(Cc("D1"), { color: "02C39A" }), cell(M("D1"), { color: "02C39A" }), cell("—")],
+  [cell("D1*", { bold: true, color: "02C39A" }), cell("NEURAL decoder", { color: "02C39A" }), cell("measured"), cell(W("D1_oracle"), { bold: true, color: "02C39A" }), cell(Cc("D1_oracle"), { color: "02C39A" }), cell("—"), cell("—")],
+  [cell("D2", { bold: true, color: "B85042" }), cell("mel diffusion — FAILED", { color: "B85042" }), cell("predicted"), cell(W("D2"), { bold: true, color: "B85042" }), cell(Cc("D2"), { color: "B85042" }), cell(M("D2"), { color: "B85042" }), cell("—")],
+], { x: 0.7, y: 1.2, w: 11.9, colW: [0.9, 3.0, 1.5, 1.5, 1.4, 1.8, 1.8], rowH: 0.31,
+     border: { type: "solid", color: LINE, pt: 1 }, margin: 0.06, objectName: "allResults" });
+s.addText("Lower is better for WER, CER and MCD; higher for MOS. 100 clips each, unseen book. D1* = oracle-duration ablation. D2's WER above 100% means the recogniser invents words.",
+  { x: 0.7, y: 3.72, w: 11.9, h: 0.3, fontSize: 9.5, italic: true, color: MUTED, isTextBox: true, margin: 0 });
 
-s.addText("Reported twice because silence is only 5.3% of phones but averages 14.6 frames against 7.4 — it would otherwise swamp the headline.",
-  { x: 0.7, y: 3.06, w: 5.9, h: 0.5, fontSize: 10, italic: true, color: MUTED, isTextBox: true, margin: 0 });
+card(s, 0.7, 4.05, 5.85, 2.55, "find1");
+s.addText("1 — The acoustic model was the bottleneck", { x: 0.95, y: 4.22, w: 5.35, h: 0.3, fontSize: 12, bold: true, color: C.accent2, isTextBox: true, margin: 0 });
+s.addText([{ text: "21.15%  →  3.74%", options: { fontSize: 20, bold: true, color: "02C39A" } }],
+  { x: 0.95, y: 4.55, w: 5.35, h: 0.45, isTextBox: true, margin: 0 });
+s.addText("Swap the templates for a learned decoder, hold durations fixed.  p = 2×10⁻¹⁵.\nThat closes 83% of the gap to the real recording and lands 1.3 points from the vocoder's own ceiling. MCD agrees: 30.1 dB vs 43.9 (chance is 86.1).",
+  { x: 0.95, y: 5.05, w: 5.35, h: 1.4, fontSize: 10, color: INK, isTextBox: true, margin: 0 });
 
-s.addText("Top features (permutation importance)", { x: 0.7, y: 3.6, w: 5.9, h: 0.3, fontSize: 12.5, bold: true, color: C.accent1, isTextBox: true, margin: 0 });
-const feats = [["phone", impOf("phone")], ["next_phone", impOf("next_phone")], ["prev_phone", impOf("prev_phone")], ["dist_sil_right", impOf("dist_sil_right")]];
-const fmax = Math.max(...feats.map((f) => f[1]));
-let fy = 3.96;
-for (const [n, v] of feats) {
-  s.addText(n, { x: 0.7, y: fy, w: 1.65, h: 0.26, fontSize: 10.5, color: INK, isTextBox: true, margin: 0 });
-  s.addShape(pres.ShapeType.rect, { x: 2.4, y: fy + 0.05, w: Math.max(0.08, (v / fmax) * 3.0), h: 0.17,
-    fill: { color: n === "dist_sil_right" ? "02C39A" : "1C7293" }, objectName: "fb" + n });
-  s.addText(v.toFixed(3), { x: 5.5, y: fy, w: 1.0, h: 0.26, fontSize: 9.5, color: MUTED, isTextBox: true, margin: 0 });
-  fy += 0.32;
-}
-s.addText("dist_sil_right is 19x more important than dist_sil_left — the model found PRE-pausal lengthening on its own: sounds stretch before an upcoming pause, not after a past one.",
-  { x: 0.7, y: 5.3, w: 5.9, h: 0.6, fontSize: 10, italic: true, color: C.accent3, isTextBox: true, margin: 0 });
-
-s.addText("2 — The four systems, 100 clips each", { x: 6.9, y: 1.2, w: 5.7, h: 0.3, fontSize: 12.5, bold: true, color: C.accent1, isTextBox: true, margin: 0 });
-s.addTable([
-  [hdr("System"), hdr("What it is"), hdr("WER"), hdr("MOS")],
-  [cell("R0", { bold: true, color: "065A82" }), cell("real recording"), cell(f2(wer.R0.wer) + "%", { bold: true }), cell(f2(mos.R0), { bold: true })],
-  [cell("R1", { bold: true, color: "065A82" }), cell("real picture → vocoder"), cell(f2(wer.R1.wer) + "%", { bold: true }), cell(f2(mos.R1), { bold: true })],
-  [cell("A1", { bold: true, color: "065A82" }), cell("templates + REAL timings"), cell(f2(wer.A1.wer) + "%", { bold: true }), cell(f2(mos.A1), { bold: true })],
-  [cell("A2", { bold: true, color: "02C39A" }), cell("templates + PREDICTED"), cell(f2(wer.A2.wer) + "%", { bold: true, color: "02C39A" }), cell(f2(mos.A2), { bold: true, color: "02C39A" })],
-], { x: 6.9, y: 1.54, w: 5.7, colW: [0.85, 2.45, 1.2, 1.2], rowH: 0.36, border: { type: "solid", color: LINE, pt: 1 }, margin: 0.06, objectName: "sysTable" });
-
-s.addText("3 — Reading the chain: one step at a time", { x: 6.9, y: 3.3, w: 5.7, h: 0.3, fontSize: 12.5, bold: true, color: C.accent1, isTextBox: true, margin: 0 });
-const chain = [
-  ["R0 → R1", "+0.63 pp", "the vocoder — nearly free", "1C7293"],
-  ["R1 → A1", "+21.17 pp", "averaged templates — ALL the loss", "B85042"],
-  ["A1 → A2", "−2.50 pp", "predicting timings — cost nothing", "02C39A"],
-];
-let chy = 3.66;
-for (const [step, cost, what, col] of chain) {
-  s.addText(step, { x: 6.9, y: chy, w: 1.1, h: 0.28, fontSize: 10.5, bold: true, color: MUTED, isTextBox: true, margin: 0 });
-  s.addText(cost, { x: 7.95, y: chy, w: 1.15, h: 0.28, fontSize: 12.5, bold: true, color: col, isTextBox: true, margin: 0 });
-  s.addText(what, { x: 9.15, y: chy + 0.02, w: 3.45, h: 0.28, fontSize: 10, color: INK, isTextBox: true, margin: 0 });
-  chy += 0.4;
-}
-card(s, 6.9, 4.95, 5.7, 1.5, "surprise");
-s.addText("The surprise", { x: 7.15, y: 5.1, w: 5.2, h: 0.28, fontSize: 11, bold: true, color: C.accent6, isTextBox: true, margin: 0 });
-s.addText("We expected A2 to be worse. It was not — but A2 wins on only 40 of 100 clips (p = 0.048 and 0.100), and on naturalness 21 of 25 ratings were tied (p = 0.317). So the honest claim is no measurable effect, not that predicted beats real.",
-  { x: 7.15, y: 5.38, w: 5.2, h: 1.0, fontSize: 9.5, color: INK, isTextBox: true, margin: 0 });
-s.addNotes("Both metrics agree: the duration source is undetectable, the acoustic model is obvious to both. The vocoder costs 0.72 MOS, the templates cost 2.32 MOS.");
+card(s, 6.75, 4.05, 5.85, 2.55, "find2");
+s.addText("2 — Only then did timing start to matter", { x: 7.0, y: 4.22, w: 5.35, h: 0.3, fontSize: 12, bold: true, color: C.accent6, isTextBox: true, margin: 0 });
+s.addText([{ text: "p = 0.048 / 0.100", options: { fontSize: 14, bold: true, color: "9AB2BF" } },
+           { text: "   →   ", options: { fontSize: 14, color: MUTED } },
+           { text: "p = 0.0014", options: { fontSize: 18, bold: true, color: "B85042" } }],
+  { x: 7.0, y: 4.55, w: 5.35, h: 0.45, isTextBox: true, margin: 0 });
+s.addText("With templates, measured vs predicted durations was indistinguishable. With the neural decoder the same contrast is clear (2.37% vs 3.74%, better on 21 of 100 clips, worse on 3).\nThe timing signal was always there — the crude acoustic model was hiding it.",
+  { x: 7.0, y: 5.05, w: 5.35, h: 1.4, fontSize: 10, color: INK, isTextBox: true, margin: 0 });
+s.addNotes("If asked why D1 with oracle durations slightly beats R1: 2.37 vs 2.48 is within noise at n=100, and the decoder produces smoother spectra than real speech, which the vocoder handles cleanly. Do not claim the model beats real audio.");
 
 // ============================ 7 — what we learned ==========================
 pres.addSection({ title: "Conclusion" });
@@ -356,28 +350,29 @@ s.addText("What we learned", { placeholder: "title" });
 
 const findings = [
   ["Forced alignment gives timing we can trust",
-   "94.6% of boundaries verified against a 53.7% control, all 13,100 clips aligned, none excluded. It reproduced phonetics we never encoded: stressed vowels 108 ms vs 67 ms."],
-  ["Context features clearly beat a per-phone average",
-   improvement + "% lower duration error (" + pick(test,"mean","mae_ms").toFixed(2) + " ms → " + pick(test,"gbt","mae_ms").toFixed(2) + " ms). The model independently recovered pre-pausal lengthening."],
-  ["We set out to measure one thing and learned the other matters ~30x more",
-   "Predicting durations cost nothing measurable on EITHER metric. The crude acoustic model cost 21 points of WER and 2.32 MOS. So the next effort belongs in the acoustic model — exactly where a diffusion generator would sit."],
+   "94.6% of boundaries verified against a 53.7% control, all 13,100 clips aligned. It reproduced phonetics we never encoded: stressed vowels 108 ms vs 67 ms."],
+  ["Phase 1 found the bottleneck; phase 2 fixed it and the prediction held",
+   "Replacing 70 averaged templates with a learned decoder took WER from 21.15% to 3.74%. Phase 1's report had predicted exactly this, and that two-step arc is the project's real result."],
+  ["A measurement is only as sharp as the instrument behind it",
+   "Duration quality looked irrelevant in phase 1 and clearly mattered in phase 2. Nothing about durations changed — the acoustic model stopped hiding them."],
 ];
-let y = 1.35;
+let y = 1.3;
 for (const [h, d] of findings) {
   s.addShape(pres.ShapeType.ellipse, { x: 0.75, y: y + 0.04, w: 0.3, h: 0.3, fill: { color: C.accent2 }, objectName: "fd" + y });
   s.addText(h, { x: 1.2, y: y, w: 11.3, h: 0.36, fontSize: 15, bold: true, color: "FFFFFF", isTextBox: true, margin: 0 });
-  s.addText(d, { x: 1.2, y: y + 0.38, w: 11.3, h: 0.62, fontSize: 11.5, color: "AEC6D2", isTextBox: true, margin: 0 });
-  y += 1.22;
+  s.addText(d, { x: 1.2, y: y + 0.38, w: 11.3, h: 0.68, fontSize: 11.5, color: "AEC6D2", isTextBox: true, margin: 0 });
+  y += 1.26;
 }
-s.addText("Being honest about the limits", { x: 0.75, y: 5.1, w: 11.5, h: 0.3, fontSize: 12.5, bold: true, color: C.accent2, isTextBox: true, margin: 0 });
+s.addText("Being honest about the limits", { x: 0.75, y: 5.2, w: 11.5, h: 0.3, fontSize: 12.5, bold: true, color: C.accent2, isTextBox: true, margin: 0 });
 s.addText([
-  { text: "A2 is told the clip's true total length, so it is not yet a fully autonomous system", options: { bullet: true, breakLine: true } },
-  { text: "The listening study is 5 team members, not blind naive listeners — it corroborates WER rather than measuring naturalness independently", options: { bullet: true, breakLine: true } },
-  { text: "One speaker only, and a deliberately crude acoustic model that caps how good A1 and A2 can ever sound", options: { bullet: true } },
-], { x: 0.75, y: 5.44, w: 11.5, h: 1.1, fontSize: 11, color: "8FA9B8", paraSpaceAfter: 4, isTextBox: true, margin: 0 });
-s.addText("Next: predict total length too  ·  replace templates with a learned acoustic model  ·  repeat the listening study blind",
-  { x: 0.75, y: 6.72, w: 11.5, h: 0.35, fontSize: 11, italic: true, color: "02C39A", isTextBox: true, margin: 0 });
-s.addNotes("If pushed on why the synthetic audio is worse than the real recording: that is the expected consequence of a deliberately simple acoustic model. The project was never trying to win on audio quality - the experiment is the A1 vs A2 comparison, which is only meaningful because the acoustic model is held fixed.");
+  { text: "D1 is undertrained — train and val loss were still falling at 9,000 steps on a laptop GPU, so 3.74% is a lower bound", options: { bullet: true, breakLine: true } },
+  { text: "The neural duration predictor LOST to phase 1's boosted trees (23.81 ms vs 19.65 ms) — the classical baseline was not a straw man", options: { bullet: true, breakLine: true } },
+  { text: "Durations are still rescaled to the clip's true length, so the system is not yet fully autonomous; the listening study was 5 team members, not blind", options: { bullet: true, breakLine: true } },
+  { text: "D2 diffusion FAILED at 123% WER. It learned what spectrograms look like (std 0.97 vs real 0.93) but not how to condition on the phonemes — 9,000 steps is far too few for diffusion", options: { bullet: true } },
+], { x: 0.75, y: 5.54, w: 11.5, h: 1.15, fontSize: 10.5, color: "8FA9B8", paraSpaceAfter: 4, isTextBox: true, margin: 0 });
+s.addText("Next: train to convergence on a real GPU  ·  predict total length too  ·  repeat the listening study blind",
+  { x: 0.75, y: 6.82, w: 11.5, h: 0.35, fontSize: 10.5, italic: true, color: "02C39A", isTextBox: true, margin: 0 });
+s.addNotes("The honest headline is not 'our model is good'. It is 'we measured which component mattered, then changed that component and the predicted effect appeared'. That is what makes it an experiment rather than a demo.");
 
 // ---- write ------------------------------------------------------------------
 (async () => {

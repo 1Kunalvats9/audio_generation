@@ -52,7 +52,10 @@ def test_build_summary_table():
     summary = build_summary_table(wer_dfs, mae_dict)
     assert "System" in summary.columns
     assert "Mean WER (%)" in summary.columns
-    assert len(summary) == 4  # R0, R1, A1, A2
+    # one row per declared system, so adding D1/D2 in phase 2 does not break this
+    from src.eval.make_results import SYSTEMS
+    assert len(summary) == len(SYSTEMS)
+    assert list(summary["System"]) == SYSTEMS
     r0_row = summary[summary["System"] == "R0"].iloc[0]
     assert r0_row["Mean WER (%)"] == 0.0
     assert r0_row["Clips"] == 2
