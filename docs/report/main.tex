@@ -18,7 +18,7 @@
 \title{How Much Does Timing Matter?\\An Ablation of Explicit Duration Modelling in Text-to-Speech}
 
 \author{
-\IEEEauthorblockN{Kunal Vats, Pushkar Jain, Tanishk Agrawal, Shaurya Sharma, Chaitanya Shekhawat}
+\IEEEauthorblockN{Kunal Vats, Pushkar Jain, Tanishk Agrawal, Shaurya Sharma, Chaitanya Singh}
 \IEEEauthorblockA{\textit{Advanced Machine Learning --- Course Project}\\
 \texttt{https://github.com/1Kunalvats9/audio\_generation}}
 }
@@ -574,13 +574,18 @@ exactly the conditioning signal it requires.
 
 \section*{Contributions}
 
-\textbf{Kunal Vats} --- corpus preparation, text normalisation, partitioning, shared configuration;
-duration model (with Pushkar Jain).
-\textbf{Pushkar Jain} --- duration model: feature construction, model comparison, error analysis
-(with Kunal Vats).
-\textbf{Tanishk Agrawal} --- forced alignment, out-of-vocabulary dictionary, alignment validation.
-\textbf{Shaurya Sharma} --- mel extraction, phoneme templates, vocoder integration, synthesis.
-\textbf{Chaitanya Shekhawat} --- ASR evaluation harness, results aggregation, failure analysis.
+\textbf{Kunal Vats} --- corpus preparation, text normalisation, partitioning, shared
+configuration; duration models (with Pushkar Jain); phase 2 data pipeline, phoneme vocabulary,
+mel statistics and grapheme-to-phoneme conversion.
+\textbf{Pushkar Jain} --- duration modelling: feature construction, model comparison, error
+analysis (with Kunal Vats); the neural duration predictor and its comparison against phase 1.
+\textbf{Tanishk Agrawal} --- forced alignment, out-of-vocabulary dictionary, alignment
+validation; phoneme encoder and length regulator.
+\textbf{Shaurya Sharma} --- mel extraction, phoneme templates, vocoder integration, synthesis;
+the neural decoder, the training loop with checkpointing and the overfit gate, and the diffusion
+model.
+\textbf{Chaitanya Singh} --- ASR evaluation harness, results aggregation, failure analysis,
+subjective listening study; mel cepstral distortion and the phase 2 demonstration notebook.
 
 \balance
 \bibliographystyle{IEEEtran}

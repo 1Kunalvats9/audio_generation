@@ -74,7 +74,7 @@ const THEME = {
 const pres = new pptxgen();
 pres.layout = "LAYOUT_WIDE";
 pres.theme = { headFontFace: THEME.headFontFace, bodyFontFace: THEME.bodyFontFace };
-pres.author = "Kunal Vats, Pushkar Jain, Tanishk Agrawal, Shaurya Sharma, Chaitanya Shekhawat";
+pres.author = "Kunal Vats, Pushkar Jain, Tanishk Agrawal, Shaurya Sharma, Chaitanya Singh";
 pres.title = "Phonetic-Guided Speech Generation";
 const C = pres.SchemeColor;
 
@@ -121,11 +121,11 @@ let s = pres.addSlide({ masterName: "TITLE_DARK", sectionTitle: "Introduction" }
 s.addText("Phonetic-Guided Speech Generation", { placeholder: "title" });
 s.addText("How much does timing matter in synthetic speech?", { placeholder: "body" });
 const team = [
-  ["Kunal Vats", "Data — cleaning, splits, shared settings  ·  Duration model (with Pushkar)"],
-  ["Pushkar Jain", "Duration model — features, 3 models, error analysis (with Kunal)"],
-  ["Tanishk Agrawal", "Alignment — forced alignment, phone durations"],
-  ["Shaurya Sharma", "Sound — spectrograms, templates, vocoder, synthesis"],
-  ["Chaitanya Shekhawat", "Evaluation — WER harness, listening study, failure analysis"],
+  ["Kunal Vats", "Data — cleaning, splits, shared settings  ·  Duration models, text-to-phonemes"],
+  ["Pushkar Jain", "Duration models — 21 features, 3 models, neural predictor (with Kunal)"],
+  ["Tanishk Agrawal", "Alignment — MFA, phone durations  ·  Phoneme encoder, length regulator"],
+  ["Shaurya Sharma", "Sound — spectrograms, templates, vocoder  ·  Neural decoder, training, diffusion"],
+  ["Chaitanya Singh", "Evaluation — WER, MCD, listening study, failure analysis, demo"],
 ];
 s.addTable(team.map(([n, r]) => [
   { text: n, options: { bold: true, color: "FFFFFF", fontSize: 13 } },

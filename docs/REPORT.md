@@ -509,7 +509,7 @@ telling the team, which is what let five people work on one pipeline at once.
 | **Pushkar Jain** | Duration model, with Kunal | The 21-feature builder, the three models, model selection on validation, the MAE harness and the two result tables |
 | **Tanishk Agrawal** | Alignment | Montreal Forced Aligner setup, the 366-word supplementary pronunciation dictionary, TextGrid → `phones.csv` conversion, and the alignment validation notebook |
 | **Shaurya Sharma** | Sound | `src/audio.py` (wav ↔ mel, HiFi-GAN), mel caching for all 13,100 clips, the 70 phoneme templates, and synthesis of R1 / A1 / A2 |
-| **Chaitanya Shekhawat** | Evaluation | The Whisper WER/CER harness with proper text normalisation on both sides, the results table, and the failure log |
+| **Chaitanya Singh** | Evaluation | The Whisper WER/CER harness with proper text normalisation on both sides, the results table, and the failure log |
 
 ### How the parts depended on each other
 

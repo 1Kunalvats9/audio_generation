@@ -85,5 +85,6 @@ templates:   ; $(PY) -m src.baseline.phoneme_templates
 synth:       ; $(PY) -m src.baseline.synthesize_baseline
 wer:         ; $(PY) -m src.eval.whisper_wer --all
 results:     ; $(PY) -m src.eval.make_results
+report:      ; cd docs/report && tectonic -X compile main.tex --outdir . && cp main.pdf ../Phonetic_Guided_Speech_Generation_Report.pdf
 dl-prep:     ; $(PY) -m src.dl.vocab && $(PY) -m src.dl.mel_stats && $(PY) -m src.dl.g2p --build-lexicon && $(PY) -m src.dl.dataset
 test:        ; $(PY) -m pytest tests
